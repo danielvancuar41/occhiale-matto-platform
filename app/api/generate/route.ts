@@ -104,7 +104,7 @@ async function generateHtml(body: GenerateRequest) {
 
   const resp = await anthropic.messages.create({
     model: MODELS.strategic,
-    max_tokens: 8000,
+    max_tokens: 6000,
     messages: [{ role: "user", content: prompt }]
   });
 
