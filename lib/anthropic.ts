@@ -9,7 +9,7 @@ export const anthropic = new Anthropic({
 });
 
 export const MODELS = {
-  strategic: "claude-opus-4-7",
+  strategic: "claude-sonnet-4-6",
   fast: "claude-haiku-4-5-20251001"
 } as const;
 
