@@ -3,7 +3,7 @@ import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt } from "@/lib/anth
 import type { Campaign, Product } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type GenerateRequest = {
   mode: "strategy" | "html";
@@ -104,7 +104,7 @@ async function generateHtml(body: GenerateRequest) {
 
   const resp = await anthropic.messages.create({
     model: MODELS.strategic,
-    max_tokens: 6000,
+    max_tokens: 12000,
     messages: [{ role: "user", content: prompt }]
   });
 
