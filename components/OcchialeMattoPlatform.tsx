@@ -152,7 +152,7 @@ export default function App() {
   const [htmlOutput, setHtmlOutput] = useState("");
   const [htmlStep, setHtmlStep] = useState(0); // 0=not started, 1=generating, 2=done
   const [selectedSubject, setSelectedSubject] = useState(null);
-  const [viewMode, setViewMode] = useState("preview"); // preview or code
+  const [viewMode, setViewMode] = useState("preview"); // preview | mobile | code
   const [copied, setCopied] = useState(false);
   const [filterMonth, setFilterMonth] = useState("all");
   const [showProductPicker, setShowProductPicker] = useState(false);
@@ -684,19 +684,20 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
               <div style={{ ...S.sec, display:"flex", gap:"16px", alignItems:"center", flexWrap:"wrap" }}>
                 <div>
                   <div style={{ fontSize:"9px", color:"#444", textTransform:"uppercase", letterSpacing:"1px" }}>Subject</div>
-                  <div style={{ fontSize:"14px", fontWeight:700, color:"#c9a96e" }}>{result?.subjects?.[selectedSubject]?.subject}</div>
+                  <div style={{ fontSize:"14px", fontWeight:700, color:"#c9a96e" }}>{result?.subjects?.[selectedSubject]?.subject || "—"}</div>
                 </div>
                 <div style={{ width:"1px", height:"30px", background:"#1a1a1a" }}/>
                 <div>
                   <div style={{ fontSize:"9px", color:"#444", textTransform:"uppercase", letterSpacing:"1px" }}>Preview</div>
-                  <div style={{ fontSize:"12px", color:"#888" }}>{result?.subjects?.[selectedSubject]?.preview}</div>
+                  <div style={{ fontSize:"12px", color:"#888" }}>{result?.subjects?.[selectedSubject]?.preview || "—"}</div>
                 </div>
               </div>
 
               {/* View toggle + Copy */}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
                 <div style={{ display:"flex", gap:"4px" }}>
-                  <button onClick={()=>setViewMode("preview")} style={S.btn(viewMode==="preview")}>{I.eye} Preview</button>
+                  <button onClick={()=>setViewMode("preview")} style={S.btn(viewMode==="preview")}>{I.eye} Desktop</button>
+                  <button onClick={()=>setViewMode("mobile")} style={S.btn(viewMode==="mobile")}>📱 Mobile</button>
                   <button onClick={()=>setViewMode("code")} style={S.btn(viewMode==="code")}>{I.code} Codice HTML</button>
                 </div>
                 <button onClick={copyHtml} style={{ ...S.goldBtn, fontSize:"12px", padding:"8px 18px" }}>
@@ -705,13 +706,26 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
               </div>
 
               {/* Output */}
-              {viewMode==="preview" ? (
-                <div style={{ ...S.sec, padding:0, overflow:"hidden" }}>
-                  <iframe srcDoc={htmlOutput} style={{ width:"100%", height:"700px", border:"none", borderRadius:"10px", background:"#1a1a1a" }} title="Email Preview" sandbox="allow-same-origin"/>
-                </div>
-              ) : (
+              {viewMode==="code" ? (
                 <div style={{ ...S.sec, padding:0 }}>
                   <pre style={{ margin:0, padding:"16px", fontSize:"10px", color:"#888", fontFamily:"'Space Mono',monospace", overflowX:"auto", maxHeight:"600px", overflowY:"auto", lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{htmlOutput}</pre>
+                </div>
+              ) : (
+                <div style={{ ...S.sec, padding:0, overflow:"hidden", display:"flex", justifyContent:"center", background: viewMode==="mobile" ? "#050505" : "transparent" }}>
+                  <iframe
+                    srcDoc={htmlOutput}
+                    style={{
+                      width: viewMode==="mobile" ? "390px" : "100%",
+                      maxWidth: viewMode==="mobile" ? "390px" : "100%",
+                      height: viewMode==="mobile" ? "780px" : "700px",
+                      border: viewMode==="mobile" ? "8px solid #1a1a1a" : "none",
+                      borderRadius: viewMode==="mobile" ? "28px" : "10px",
+                      background: "#1a1a1a",
+                      margin: viewMode==="mobile" ? "16px 0" : "0"
+                    }}
+                    title="Email Preview"
+                    sandbox="allow-same-origin"
+                  />
                 </div>
               )}
 
