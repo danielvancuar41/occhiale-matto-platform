@@ -156,7 +156,29 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [filterMonth, setFilterMonth] = useState("all");
   const [showProductPicker, setShowProductPicker] = useState(false);
+  const [liveProducts, setLiveProducts] = useState(null); // null = not loaded yet, array = loaded
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const htmlRef = useRef(null);
+
+  // ── Fetch live catalog from occhialematto.com on mount ──
+  useEffect(() => {
+    let cancelled = false;
+    setCatalogLoading(true);
+    fetch("/api/catalog")
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        if (data.ok && Array.isArray(data.products)) {
+          setLiveProducts(data.products);
+        }
+      })
+      .catch(err => console.error("[catalog] fetch failed", err))
+      .finally(() => { if (!cancelled) setCatalogLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Use live products if available, fallback to hardcoded
+  const ACTIVE_PRODUCTS = liveProducts && liveProducts.length > 0 ? liveProducts : PRODUCTS;
 
   // ── Computed ──
   const last5 = CAMPAIGNS.slice(-5);
@@ -210,7 +232,7 @@ export default function App() {
     const last8 = CAMPAIGNS.slice(-8);
     const bestCR = [...CAMPAIGNS].sort((a,b)=>b.cr-a.cr).slice(0,8);
     const bestRev = [...CAMPAIGNS].sort((a,b)=>b.rev-a.rev).slice(0,5);
-    const selectedProds = config.products.map(id => PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+    const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
 
     const sysPrompt = `Sei il copywriter strategico di Occhiale Matto, brand italiano urban di occhiali da sole (€24.99-€59.99). Stile: provocatorio, diretto, frasi corte a effetto. Mai aziendalese. Dare del "tu".
 
@@ -312,66 +334,29 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
   }, [config]);
 
   // ── GENERATE HTML (Step 2 → 3) ──
-  const generateHtml = useCallback(async () => {
-    if (!selectedSubject || !result) return;
+  const generateHtml = useCallback(async (overrideIndex?: number) => {
+    // Accept either a direct index (fresh click) or read from state
+    const idx = typeof overrideIndex === "number" ? overrideIndex : selectedSubject;
+    if (idx === null || idx === undefined || !result) return;
+    if (!result.subjects || !result.subjects[idx]) return;
+
+    // Sync state so UI shows correct subject
+    if (idx !== selectedSubject) setSelectedSubject(idx);
     setHtmlStep(1);
-    
-    const subj = result.subjects[selectedSubject];
-    const selectedProds = config.products.map(id => PRODUCTS.find(p=>p.id===id)).filter(Boolean);
-    const prodsToUse = selectedProds.length > 0 ? selectedProds : PRODUCTS.filter(p=>p.icon).slice(0,6);
 
-    const productBlocks = prodsToUse.map(p => `
-PRODOTTO: ${p.name}
-- Prezzo: €${p.price}
-- URL pagina: ${p.url}
-- URL immagine: ${p.img}
-- Nuovo: ${p.new ? "sì" : "no"}
-- Fotocromatico: ${FOTO_MODELS.includes(p.id) ? "sì" : "no"}`).join("\n");
+    const subj = result.subjects[idx];
+    const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+    const prodsToUse = selectedProds.length > 0 ? selectedProds : ACTIVE_PRODUCTS.slice(0,6);
 
-    const htmlPrompt = `Genera l'email HTML COMPLETA per Occhiale Matto, pronta da incollare su Klaviyo.
-
-SUBJECT: "${subj.subject}"
-PREVIEW TEXT: "${subj.preview}"
-TIPO: ${TYPE_LABELS[config.type]}
-HEADLINE HERO: "${result.headline || subj.subject.toUpperCase()}"
-SOTTOTITOLO: "${result.subheadline || ""}"
-STRUTTURA: ${result.email_structure || "Hero + griglia prodotti + CTA"}
-
-PRODOTTI DA INSERIRE:
-${productBlocks}
-
-REGOLE TECNICHE OBBLIGATORIE:
-1. DARK MODE BLOCK in <head>: <meta name="color-scheme" content="light only"> + CSS :root { color-scheme: light only !important; } + @media (prefers-color-scheme: dark) che ri-forza tutti i colori
-2. TUTTI GLI STILI INLINE su ogni td, p, a — niente classi per colori/layout
-3. CTA DOPPIA PROTEZIONE: <a style="color:#1a1a1a"><span style="color:#1a1a1a !important;text-decoration:none !important;">TESTO</span></a>
-4. FOTO PRODOTTO: height:240px, object-fit:contain, background-color:#ffffff sulla td e img, padding:12px
-5. LAYOUT: max-width:480px, width:100% — container dentro wrapper width:100%
-6. WRAPPER bgcolor="#1a1a1a" — tutto su sfondo nero
-7. COLONNE 2 prodotti affiancati (50/50) che NON si impilano su mobile
-8. Font: titoli 'Bebas Neue','Arial Black',Arial,sans-serif — body 'Montserrat',Arial,sans-serif
-9. Google Fonts import nel <head> per Bebas Neue e Montserrat
-10. LOGO HEADER 180px centrato: https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png
-11. LOGO FOOTER 130px
-12. PALETTE: nero #1a1a1a, beige #f0ebe3, beige scuro #e8ddd0, bianco #ffffff
-13. Sezioni alternate chiaro/scuro
-14. Eyebrow label con letterspacing alto sopra headline
-15. Strip feature con icone testo: Spedizione 24/48h · Reso 14gg · UV400 · Custodia inclusa
-16. CTA rettangolari sfondo beige #f0ebe3 testo nero #1a1a1a, letterspacing, CAPS
-17. FOOTER: logo, 3 negozi Roma (Via Baldo degli Ubaldi 212, Via Tuscolana 487A, CC Euroma 2), social IG @occhiale_matto e TikTok @occhiale_matto_official, unsub link, "Crazy Fashion Eyewear Since 2019"
-18. PREHEADER TEXT nascosto all'inizio del body
-19. Ogni immagine prodotto DEVE essere cliccabile (link alla pagina prodotto)
-20. Prezzo sotto ogni prodotto
-21. Nome modello sotto ogni prodotto in bold
-22. role="presentation" su ogni table
-23. Media query per mobile: titoli 22px, copy 10px, padding laterale 12px
-24. NON usare il trattino al posto della virgola
-
-Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo prima o dopo. Nessun backtick markdown.`;
+    // 4-minute timeout via AbortController — prevents UI from hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 240000);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           mode: "html",
           emailType: TYPE_LABELS[config.type] || config.type,
@@ -390,15 +375,31 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
           recentCampaigns: []
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "HTML generation failed");
-      setHtmlOutput(data.html || "");
+      clearTimeout(timeoutId);
+
+      // Robust response parsing — never assume JSON
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned non-JSON response (${res.status}): ${text.slice(0,120)}`);
+      }
+
+      if (!res.ok) throw new Error(data.error || `HTML generation failed (${res.status})`);
+      if (!data.html) throw new Error("Response OK but no HTML returned");
+
+      setHtmlOutput(data.html);
       setHtmlStep(2);
     } catch(e: any) {
-      setHtmlOutput(`<!-- Errore: ${e.message} -->`);
+      clearTimeout(timeoutId);
+      const msg = e.name === "AbortError"
+        ? "Timeout: la generazione ha superato i 4 minuti. Riprova."
+        : e.message || "Errore sconosciuto";
+      setHtmlOutput(`<!-- Errore: ${msg} -->\n<div style="padding:40px;font-family:monospace;color:#ff6b6b;background:#0a0a0a;">\n<h3>Errore durante la generazione</h3>\n<p>${msg}</p>\n<p style="color:#888;font-size:12px;">Clicca "Rigenera HTML" per riprovare.</p>\n</div>`);
       setHtmlStep(2);
     }
-  }, [selectedSubject, result, config]);
+  }, [selectedSubject, result, config, ACTIVE_PRODUCTS]);
 
   const copyHtml = () => {
     navigator.clipboard?.writeText(htmlOutput);
@@ -428,7 +429,7 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
             </div>
           </div>
           <div style={{ fontSize:"9px", color:"#333", padding:"4px 10px", border:"1px solid #1a1a1a", borderRadius:"5px" }}>
-            {CAMPAIGNS.length} campagne · {PRODUCTS.length} prodotti
+            {CAMPAIGNS.length} campagne · {ACTIVE_PRODUCTS.length} prodotti{liveProducts ? " live" : ""}
           </div>
         </div>
         <div style={{ display:"flex", maxWidth:"1100px", margin:"0 auto" }}>
@@ -562,7 +563,7 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
                 {showProductPicker && (
                   <div style={{ background:"#0f0f0f", border:"1px solid #1a1a1a", borderRadius:"8px", padding:"12px", maxHeight:"200px", overflowY:"auto" }}>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:"4px" }}>
-                      {PRODUCTS.map(p => {
+                      {ACTIVE_PRODUCTS.map(p => {
                         const sel = config.products.includes(p.id);
                         return (
                           <button key={p.id} onClick={()=>toggleProduct(p.id)} style={{
@@ -630,17 +631,17 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
 
               {result.subjects?.length > 0 && (
                 <div style={S.sec}>
-                  <div style={S.secTitle}>Scegli la subject line → poi genero l'HTML</div>
+                  <div style={S.secTitle}>Clicca la subject line preferita → parte la generazione HTML</div>
                   <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                     {result.subjects.map((s,i) => (
-                      <button key={i} onClick={()=>setSelectedSubject(i)} style={{
+                      <button key={i} onClick={()=>generateHtml(i)} style={{
                         background: selectedSubject===i ? "#c9a96e0f" : "#0f0f0f",
                         border: `1px solid ${selectedSubject===i ? "#c9a96e44" : "#1a1a1a"}`,
                         borderRadius:"8px", padding:"14px 16px", textAlign:"left", cursor:"pointer",
                         fontFamily:"inherit", transition:"all 0.15s", position:"relative"
                       }}>
                         {s.score && <span style={{ position:"absolute", top:"8px", right:"12px", fontSize:"9px", padding:"2px 6px", borderRadius:"4px", background:s.score>=80?"#4ecdc41a":"#c9a96e1a", color:s.score>=80?"#4ecdc4":"#c9a96e", fontWeight:700 }}>{s.score}/100</span>}
-                        <div style={{ fontSize:"9px", color:"#444", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · {s.subject?.length || 0} char</div>
+                        <div style={{ fontSize:"9px", color:"#444", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · {s.subject?.length || 0} char · clicca per generare</div>
                         <div style={{ fontSize:"15px", fontWeight:700, color:selectedSubject===i?"#c9a96e":"#ddd", marginBottom:"4px" }}>{s.subject}</div>
                         <div style={{ fontSize:"11px", color:"#666", fontStyle:"italic", marginBottom:"4px" }}>Preview: {s.preview}</div>
                         <div style={{ fontSize:"10px", color:"#444" }}>{s.rationale}</div>
@@ -648,13 +649,9 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
                       </button>
                     ))}
                   </div>
-
-                  {selectedSubject !== null && (
-                    <div style={{ marginTop:"14px", display:"flex", gap:"10px", alignItems:"center" }}>
-                      <button onClick={generateHtml} style={S.goldBtn}>{I.mail} GENERA EMAIL HTML</button>
-                      <span style={{ fontSize:"10px", color:"#444" }}>Con {config.products.length || "6 default"} prodotti</span>
-                    </div>
-                  )}
+                  <div style={{ marginTop:"12px", fontSize:"10px", color:"#444", textAlign:"center" }}>
+                    Cliccando una subject si genera automaticamente l'HTML dell'email con {config.products.length || "6 default"} prodotti
+                  </div>
                 </div>
               )}
 
@@ -733,7 +730,7 @@ Genera SOLO il codice HTML completo, da <!DOCTYPE html> a </html>. Nessun testo 
               <div style={{ display:"flex", gap:"8px", marginTop:"10px" }}>
                 <button onClick={()=>{setHtmlStep(0);setSelectedSubject(null);}} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Cambia subject</button>
                 <button onClick={()=>{setStep(0);setResult(null);setHtmlStep(0);setHtmlOutput("");setSelectedSubject(null);}} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Nuova email</button>
-                <button onClick={generateHtml} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>↻ Rigenera HTML</button>
+                <button onClick={()=>generateHtml()} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>↻ Rigenera HTML</button>
               </div>
             </div>
           )}
