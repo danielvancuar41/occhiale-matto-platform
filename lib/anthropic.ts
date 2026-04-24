@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { formatBrandRulesForPrompt } from "./brand-rules";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.warn("[anthropic] ANTHROPIC_API_KEY missing - generation disabled");
@@ -115,7 +116,7 @@ Rispondi SOLO con JSON valido, nessun testo prima o dopo, nessun markdown fence.
 /**
  * Build the HTML-generation prompt (step 3).
  * Contains the Occhiale Matto brand DNA extracted from 3 reference campaigns
- * that achieved top CR/OR in Q1 2026.
+ * that achieved top CR/OR in Q1 2026, PLUS the brand-rules.ts corrections.
  */
 export function buildHtmlPrompt(opts: {
   chosenSubject: string;
@@ -139,7 +140,12 @@ PRODOTTO: ${p.name}
 - Nuovo: ${p.isNew ? "sì" : "no"}
 - Fotocromatico: ${FOTO_MODELS.has(p.id) ? "sì" : "no"}`).join("\n");
 
-  return `Genera l'email HTML COMPLETA per Occhiale Matto, pronta da incollare su Klaviyo. Segui il DNA VISIVO del brand estratto da 3 campagne storiche vincenti.
+  // Inject brand-rules corrections at the top of the prompt for maximum weight
+  const brandRulesBlock = formatBrandRulesForPrompt();
+
+  return `Genera l'email HTML COMPLETA per Occhiale Matto, pronta da incollare su Klaviyo. Segui il DNA VISIVO del brand estratto da 3 campagne storiche vincenti E le CORREZIONI VINCOLANTI sotto.
+
+${brandRulesBlock}
 
 ================================================================
 INPUT EMAIL
@@ -173,13 +179,13 @@ DNA VISIVO OCCHIALE MATTO (pattern estratti da campagne con CR > 1.2%)
 
 ### STRUTTURA SEZIONI (ordine tipico di un'email OM)
 1. Preheader nascosto (visibility:hidden, altezza 0)
-2. Header: logo 180px centrato, padding verticale 24-32px, bg #1a1a1a
+2. Header: logo 180px centrato, padding verticale 24-32px, bg #1a1a1a (SENZA tagline sotto — la tagline va solo nel footer)
 3. Hero: full-width con eyebrow + headline + (opzionale) immagine prodotto o lifestyle
 4. Sezioni alternate: una scura (#1a1a1a) → una chiara (#f0ebe3 o #e8ddd0) → una scura
 5. Card prodotto: foto su bg #ffffff (padding 16-24px) SOPRA un blocco scuro #1a1a1a con nome + prezzo + CTA
-6. Quote block (opzionale): border-left 3px solid #f0ebe3, padding-left 20px, italic, 16-18px
+6. Quote block (opzionale): border-left 3px solid #f0ebe3, padding-left 20px, italic, 16-18px. Chiudere con "— OM" (firma breve, non estesa).
 7. Strip feature: 3-4 colonne con emoji + microtesto (es: 🚚 24/48h · 🔄 Reso 14gg · ☀️ UV400 · 📦 Custodia)
-8. CTA finale centrale prominente
+8. CTA finale centrale prominente (evita domande retoriche deboli)
 9. Footer
 
 ### CARD PRODOTTO (pattern vincente testato)
@@ -187,20 +193,23 @@ DNA VISIVO OCCHIALE MATTO (pattern estratti da campagne con CR > 1.2%)
 - Foto: bg #ffffff, height 240px, object-fit contain, padding interno 16-20px
 - Sotto la foto: blocco bg #1a1a1a padding 24px contenente:
   - Eyebrow "MODELLO" o categoria (10px, letter-spacing 3px, color #f0ebe3, margin-bottom 8px)
-  - Nome modello (Bebas Neue 24-28px, color #ffffff, uppercase, margin-bottom 6px)
-  - Prezzo (Montserrat 14px bold, color #f0ebe3, margin-bottom 16px)
-  - CTA bottone bg #f0ebe3 color #1a1a1a padding 12px 24px letter-spacing 2px
+  - Nome modello ESATTO dal catalog (Bebas Neue 24-28px, color #ffffff, uppercase, margin-bottom 6px)
+  - Prezzo ESATTO dal catalog (Montserrat 14px bold, color #f0ebe3, margin-bottom 16px)
+  - CTA bottone bg #f0ebe3 color #1a1a1a padding 12px 24px letter-spacing 2px. Varia il testo CTA tra card diverse (LO VOGLIO, PRENDILO, SCOPRILO, È MIO).
 
 ### FOOTER OBBLIGATORIO (replicato esatto)
 - bg #1a1a1a, padding 40px top 32px bottom
 - Logo Occhiale Matto 130px centrato
+- Payoff "CRAZY FASHION EYEWEAR SINCE 2019" (letter-spacing 3px, 10px, color #f0ebe3)
 - 3 negozi Roma cliccabili (link Google Maps):
   * Via Baldo degli Ubaldi 212
   * Via Tuscolana 487A
   * CC Euroma 2
   (formato: nome negozio su riga, indirizzo riga sotto, 12px, color #b0b0b0)
-- Icone social IG e TikTok (@occhiale_matto su IG, @occhiale_matto_official su TikTok) 24px
-- Tagline "CRAZY FASHION EYEWEAR SINCE 2019" (letter-spacing 3px, 10px, color #f0ebe3)
+- Link social TESTUALI PULITI (no quadratini con "IG"/"TK"):
+  * SEGUICI SU INSTAGRAM → (link a https://www.instagram.com/occhiale_matto)
+  * SEGUICI SU TIKTOK → (link a https://www.tiktok.com/@occhiale_matto_official)
+  Font 11px, letter-spacing 2-3px, color #f0ebe3, con freccia → o ↗
 - Link {% unsubscribe %} 11px color #888
 - Indirizzo legale a fondo pagina 10px color #666
 
@@ -222,15 +231,16 @@ REGOLE TECNICHE OBBLIGATORIE
 7. Logo header: https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png
 8. Se 2 prodotti affiancati: NON devono impilarsi su mobile se possibile (usa table con 2 td al 50%)
 9. Se 3-4 prodotti: griglia 2x2 o 1x3 a tua scelta in base al tipo email
-10. Prezzo SEMPRE visibile sotto ogni prodotto
+10. Prezzo SEMPRE visibile sotto ogni prodotto, ESATTO dal catalog (MAI inventato)
 11. Preheader nascosto con testo reale (no "&nbsp;&nbsp;...")
 12. Media query mobile: headline ridotta, padding laterale 16-20px, font body 13-14px
 13. MAI trattini al posto di virgole
 14. MAI emoji nel subject (emoji SÌ nelle strip feature e body)
 15. CTA principale: sempre 1 per prodotto + 1 finale centrale
 16. Bottone bulletproof VML per Outlook opzionale ma apprezzato
-17. Alt text descrittivo su ogni <img>
+17. Alt text descrittivo REALE su ogni <img> (no "prodotto" generico)
 18. Non usare CSS grid o flex (supporto email client limitato, usa solo table)
+19. MAI duplicare la tagline "CRAZY FASHION EYEWEAR SINCE 2019" — va SOLO nel footer
 
 ================================================================
 STRUTTURA TIPICA PER NUMERO PRODOTTI
