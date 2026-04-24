@@ -1,17 +1,6 @@
 /**
  * Public scraper for occhialematto.com — reads /products.json endpoint
  * No authentication needed. Works on any Shopify store.
- *
- * Shopify exposes /products.json by default on every storefront.
- * Returns up to 250 products per page. Paginated with ?page=N.
- *
- * Response shape (per product):
- * {
- *   id, title, handle, body_html, vendor, product_type,
- *   created_at, updated_at, published_at, tags (string),
- *   variants: [{ id, title, price, available, compare_at_price, ... }],
- *   images: [{ id, src, alt, position, ... }]
- * }
  */
 
 const STORE_URL = "https://www.occhialematto.com";
@@ -32,10 +21,14 @@ export type ScrapedProduct = {
   publishedAt: string;
 };
 
-/**
- * Fetch all products from the public storefront.
- * Paginates automatically up to 5 pages (1250 products) — more than enough.
- */
+// Robust tag normalizer — Shopify sometimes returns tags as string, sometimes as array
+function normalizeTags(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(t => String(t).trim()).filter(Boolean);
+  if (typeof raw === "string") return raw.split(",").map(t => t.trim()).filter(Boolean);
+  return [];
+}
+
 export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
   const all: ScrapedProduct[] = [];
 
@@ -44,7 +37,6 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
     const res = await fetch(url, {
       headers: { "User-Agent": "OcchialeMattoPlatform/1.0" },
       cache: "no-store",
-      // Next.js revalidation — refetch at most every 10 minutes
       next: { revalidate: 600 }
     });
 
@@ -70,7 +62,7 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
         currency: "EUR",
         imageUrl: firstImage?.src || null,
         url: `${STORE_URL}/products/${p.handle}`,
-        tags: (p.tags || "").split(",").map((t: string) => t.trim()).filter(Boolean),
+        tags: normalizeTags(p.tags),
         available: (p.variants || []).some((v: any) => v.available),
         productType: p.product_type || "",
         createdAt: p.created_at || "",
@@ -78,17 +70,12 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
       });
     }
 
-    // If we got fewer than 250, we've reached the last page
     if (products.length < 250) break;
   }
 
   return all;
 }
 
-/**
- * Fetch a single product by handle (e.g. "cardie", "destino").
- * Useful for quick lookups without scraping the whole catalog.
- */
 export async function scrapeProduct(handle: string): Promise<ScrapedProduct | null> {
   const url = `${STORE_URL}/products/${handle}.json`;
   const res = await fetch(url, {
@@ -114,7 +101,7 @@ export async function scrapeProduct(handle: string): Promise<ScrapedProduct | nu
     currency: "EUR",
     imageUrl: firstImage?.src || null,
     url: `${STORE_URL}/products/${p.handle}`,
-    tags: (p.tags || "").split(",").map((t: string) => t.trim()).filter(Boolean),
+    tags: normalizeTags(p.tags),
     available: (p.variants || []).some((v: any) => v.available),
     productType: p.product_type || "",
     createdAt: p.created_at || "",
