@@ -85,7 +85,7 @@ const CAMPAIGNS = [
 ];
 
 const TYPE_LABELS = { drop:"Nuovo Arrivo", multi:"Multi-Prodotto", categoria:"Categoria", community:"Community", promo:"Promo", brand:"Brand", stagionale:"Stagionale" };
-const TYPE_COLORS = { drop:"#c9a96e", multi:"#4ecdc4", categoria:"#ff6b6b", community:"#a78bfa", promo:"#f59e0b", brand:"#6b7280", stagionale:"#34d399" };
+const TYPE_COLORS = { drop:"#b8924a", multi:"#1a9d94", categoria:"#d64545", community:"#7c5cd4", promo:"#d97706", brand:"#52525b", stagionale:"#10b981" };
 
 const fmtPct = n => n?.toFixed?.(1) ?? "0.0";
 
@@ -107,7 +107,7 @@ const I = {
 };
 
 // ── SPARKLINE ──
-function Spark({ data, color="#c9a96e", w=100, h=28 }) {
+function Spark({ data, color="#b8924a", w=100, h=28 }) {
   if (!data?.length) return null;
   const mn = Math.min(...data)*0.95, mx = Math.max(...data)*1.05, rng = mx-mn||1;
   const pts = data.map((v,i) => `${(i/(data.length-1))*w},${h-((v-mn)/rng)*h}`).join(" ");
@@ -121,17 +121,17 @@ function Spark({ data, color="#c9a96e", w=100, h=28 }) {
 }
 
 // ── KPI CARD ──
-function Kpi({ label, value, trend, spark, color="#c9a96e", sub }) {
+function Kpi({ label, value, trend, spark, color="#b8924a", sub }) {
   const up = trend > 0;
   return (
-    <div style={{ background:"#0c0c0c", border:"1px solid #1a1a1a", borderRadius:"10px", padding:"16px 18px", flex:1, minWidth:"160px", position:"relative" }}>
+    <div style={{ background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px", padding:"16px 18px", flex:1, minWidth:"160px", position:"relative" }}>
       <div style={{ position:"absolute", top:0, left:0, right:0, height:"2px", background:color, borderRadius:"10px 10px 0 0" }}/>
-      <div style={{ fontSize:"10px", color:"#555", textTransform:"uppercase", letterSpacing:"1.5px", marginBottom:"6px" }}>{label}</div>
-      <div style={{ fontSize:"24px", fontWeight:800, color:"#f0ebe3", fontFamily:"'Space Mono',monospace" }}>{value}</div>
-      {sub && <div style={{ fontSize:"10px", color:"#444", marginTop:"2px" }}>{sub}</div>}
+      <div style={{ fontSize:"10px", color:"#9a9089", textTransform:"uppercase", letterSpacing:"1.5px", marginBottom:"6px" }}>{label}</div>
+      <div style={{ fontSize:"24px", fontWeight:800, color:"#1a1a1a", fontFamily:"'Space Mono',monospace" }}>{value}</div>
+      {sub && <div style={{ fontSize:"10px", color:"#7a7a7a", marginTop:"2px" }}>{sub}</div>}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"8px" }}>
         {trend !== undefined && (
-          <span style={{ color:up?"#4ecdc4":"#ff6b6b", fontSize:"11px", fontWeight:600, display:"flex", alignItems:"center", gap:"2px" }}>
+          <span style={{ color:up?"#1a9d94":"#d64545", fontSize:"11px", fontWeight:600, display:"flex", alignItems:"center", gap:"2px" }}>
             {up ? I.up : I.down} {Math.abs(trend).toFixed(1)}%
           </span>
         )}
@@ -396,7 +396,7 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
       const msg = e.name === "AbortError"
         ? "Timeout: la generazione ha superato i 4 minuti. Riprova."
         : e.message || "Errore sconosciuto";
-      setHtmlOutput(`<!-- Errore: ${msg} -->\n<div style="padding:40px;font-family:monospace;color:#ff6b6b;background:#0a0a0a;">\n<h3>Errore durante la generazione</h3>\n<p>${msg}</p>\n<p style="color:#888;font-size:12px;">Clicca "Rigenera HTML" per riprovare.</p>\n</div>`);
+      setHtmlOutput(`<!-- Errore: ${msg} -->\n<div style="padding:40px;font-family:monospace;color:#d64545;background:#faf7f2;">\n<h3>Errore durante la generazione</h3>\n<p>${msg}</p>\n<p style="color:#5a5a5a;font-size:12px;">Clicca "Rigenera HTML" per riprovare.</p>\n</div>`);
       setHtmlStep(2);
     }
   }, [selectedSubject, result, config, ACTIVE_PRODUCTS]);
@@ -409,26 +409,26 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
 
   // ── Styles ──
   const S = {
-    tab: (a) => ({ display:"flex", alignItems:"center", gap:"6px", padding:"10px 16px", fontSize:"12px", fontWeight:a?700:400, color:a?"#c9a96e":"#555", background:a?"#c9a96e0a":"transparent", border:"none", borderBottom:a?"2px solid #c9a96e":"2px solid transparent", cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.3px", transition:"all 0.15s" }),
-    sec: { background:"#0a0a0a", border:"1px solid #1a1a1a", borderRadius:"10px", padding:"18px", marginBottom:"14px" },
-    secTitle: { fontSize:"10px", color:"#555", textTransform:"uppercase", letterSpacing:"2px", marginBottom:"12px", fontWeight:600 },
-    btn: (active,color="#c9a96e") => ({ padding:"7px 14px", borderRadius:"7px", fontSize:"11px", fontWeight:600, background:active?color+"1a":"#0f0f0f", color:active?color:"#555", border:`1px solid ${active?color+"44":"#1a1a1a"}`, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s" }),
-    goldBtn: { padding:"12px 24px", background:"linear-gradient(135deg,#c9a96e,#a08040)", color:"#1a1a1a", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:800, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.5px", display:"flex", alignItems:"center", gap:"8px" },
+    tab: (a) => ({ display:"flex", alignItems:"center", gap:"6px", padding:"10px 16px", fontSize:"12px", fontWeight:a?700:400, color:a?"#b8924a":"#9a9089", background:a?"#b8924a0a":"transparent", border:"none", borderBottom:a?"2px solid #b8924a":"2px solid transparent", cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.3px", transition:"all 0.15s" }),
+    sec: { background:"#faf7f2", border:"1px solid #e8ddd0", borderRadius:"10px", padding:"18px", marginBottom:"14px" },
+    secTitle: { fontSize:"10px", color:"#9a9089", textTransform:"uppercase", letterSpacing:"2px", marginBottom:"12px", fontWeight:600 },
+    btn: (active,color="#b8924a") => ({ padding:"7px 14px", borderRadius:"7px", fontSize:"11px", fontWeight:600, background:active?color+"1a":"#f5f1ea", color:active?color:"#9a9089", border:`1px solid ${active?color+"44":"#e8ddd0"}`, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s" }),
+    goldBtn: { padding:"12px 24px", background:"linear-gradient(135deg,#b8924a,#8a6630)", color:"#ffffff", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:800, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.5px", display:"flex", alignItems:"center", gap:"8px" },
   };
 
   return (
-    <div style={{ fontFamily:"'DM Sans',-apple-system,sans-serif", background:"#050505", color:"#f0ebe3", minHeight:"100vh" }}>
+    <div style={{ fontFamily:"'DM Sans',-apple-system,sans-serif", background:"#faf7f2", color:"#1a1a1a", minHeight:"100vh" }}>
       {/* HEADER */}
-      <div style={{ padding:"16px 20px 0", borderBottom:"1px solid #1a1a1a", background:"#080808" }}>
+      <div style={{ padding:"16px 20px 0", borderBottom:"1px solid #e8ddd0", background:"#ffffff" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", maxWidth:"1100px", margin:"0 auto 12px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-            <div style={{ width:"32px", height:"32px", borderRadius:"8px", background:"linear-gradient(135deg,#c9a96e,#8b6914)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"12px", fontWeight:900, color:"#1a1a1a" }}>OM</div>
+            <div style={{ width:"32px", height:"32px", borderRadius:"8px", background:"linear-gradient(135deg,#b8924a,#6b4f0f)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"12px", fontWeight:900, color:"#ffffff" }}>OM</div>
             <div>
               <div style={{ fontSize:"14px", fontWeight:700, letterSpacing:"0.5px" }}>OCCHIALE MATTO</div>
-              <div style={{ fontSize:"9px", color:"#444", letterSpacing:"2px" }}>EMAIL INTELLIGENCE v2</div>
+              <div style={{ fontSize:"9px", color:"#7a7a7a", letterSpacing:"2px" }}>EMAIL INTELLIGENCE v2</div>
             </div>
           </div>
-          <div style={{ fontSize:"9px", color:"#333", padding:"4px 10px", border:"1px solid #1a1a1a", borderRadius:"5px" }}>
+          <div style={{ fontSize:"9px", color:"#5a5a5a", padding:"4px 10px", border:"1px solid #e8ddd0", borderRadius:"5px" }}>
             {CAMPAIGNS.length} campagne · {ACTIVE_PRODUCTS.length} prodotti{liveProducts ? " live" : ""}
           </div>
         </div>
@@ -444,17 +444,17 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
         {/* ═══ DASHBOARD ═══ */}
         {tab==="dashboard" && (<div>
           <div style={{ display:"flex", gap:"10px", flexWrap:"wrap", marginBottom:"14px" }}>
-            <Kpi label="Open Rate" value={`${fmtPct(avgOr5)}%`} trend={tOr} color="#4ecdc4" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.or)} color="#4ecdc4"/>}/>
-            <Kpi label="Click Rate" value={`${fmtPct(avgCr5)}%`} trend={tCr} color={avgCr5<1?"#ff6b6b":"#c9a96e"} sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.cr)} color={avgCr5<1?"#ff6b6b":"#c9a96e"}/>}/>
-            <Kpi label="Rev medio" value={`€${Math.round(avgRev5)}`} trend={tRev} color="#c9a96e" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.rev)} color="#c9a96e"/>}/>
-            <Kpi label="Totale" value={`€${(totalRev/1000).toFixed(1)}k`} color="#a78bfa" sub={`${totalOrd} ordini`}/>
+            <Kpi label="Open Rate" value={`${fmtPct(avgOr5)}%`} trend={tOr} color="#1a9d94" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.or)} color="#1a9d94"/>}/>
+            <Kpi label="Click Rate" value={`${fmtPct(avgCr5)}%`} trend={tCr} color={avgCr5<1?"#d64545":"#b8924a"} sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.cr)} color={avgCr5<1?"#d64545":"#b8924a"}/>}/>
+            <Kpi label="Rev medio" value={`€${Math.round(avgRev5)}`} trend={tRev} color="#b8924a" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.rev)} color="#b8924a"/>}/>
+            <Kpi label="Totale" value={`€${(totalRev/1000).toFixed(1)}k`} color="#7c5cd4" sub={`${totalOrd} ordini`}/>
           </div>
 
           {avgCr5 < 1.2 && (
-            <div style={{ background:"#ff6b6b0a", border:"1px solid #ff6b6b22", borderRadius:"8px", padding:"12px 16px", marginBottom:"14px", display:"flex", gap:"10px" }}>
-              <span style={{ color:"#ff6b6b", marginTop:"1px" }}>{I.alert}</span>
-              <div style={{ fontSize:"12px", color:"#888", lineHeight:1.5 }}>
-                <b style={{color:"#ff6b6b"}}>CR in calo critico: {fmtPct(avgCr5)}%</b> — Le multi-prodotto hanno CR 1.53% vs 0.90% attuale. Servono più prodotti cliccabili e subject con hook.
+            <div style={{ background:"#d645450a", border:"1px solid #d6454522", borderRadius:"8px", padding:"12px 16px", marginBottom:"14px", display:"flex", gap:"10px" }}>
+              <span style={{ color:"#d64545", marginTop:"1px" }}>{I.alert}</span>
+              <div style={{ fontSize:"12px", color:"#5a5a5a", lineHeight:1.5 }}>
+                <b style={{color:"#d64545"}}>CR in calo critico: {fmtPct(avgCr5)}%</b> — Le multi-prodotto hanno CR 1.53% vs 0.90% attuale. Servono più prodotti cliccabili e subject con hook.
               </div>
             </div>
           )}
@@ -467,9 +467,9 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
                   const mx = Math.max(...months.map(x=>x.rev))*1.1;
                   const h = mx>0?(m.rev/mx)*100:0;
                   return (<div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"3px" }}>
-                    <span style={{ fontSize:"8px", color:"#888" }}>€{Math.round(m.rev)}</span>
-                    <div style={{ width:"100%", height:`${h}px`, background:`linear-gradient(180deg,#c9a96e,#c9a96e66)`, borderRadius:"3px 3px 1px 1px", minHeight:"2px" }}/>
-                    <span style={{ fontSize:"8px", color:"#555" }}>{m.label}</span>
+                    <span style={{ fontSize:"8px", color:"#5a5a5a" }}>€{Math.round(m.rev)}</span>
+                    <div style={{ width:"100%", height:`${h}px`, background:`linear-gradient(180deg,#b8924a,#b8924a66)`, borderRadius:"3px 3px 1px 1px", minHeight:"2px" }}/>
+                    <span style={{ fontSize:"8px", color:"#9a9089" }}>{m.label}</span>
                   </div>);
                 })}
               </div>
@@ -480,10 +480,10 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
                 {typePerf.slice(0,5).map(t => (
                   <div key={t.type} style={{ display:"flex", alignItems:"center", gap:"8px" }}>
                     <span style={{ width:"60px", fontSize:"9px", color:TYPE_COLORS[t.type], fontWeight:700, textTransform:"uppercase" }}>{TYPE_LABELS[t.type]?.slice(0,8)}</span>
-                    <div style={{ flex:1, height:"16px", background:"#111", borderRadius:"3px", overflow:"hidden" }}>
+                    <div style={{ flex:1, height:"16px", background:"#e8ddd0", borderRadius:"3px", overflow:"hidden" }}>
                       <div style={{ height:"100%", width:`${(t.avgRev/400)*100}%`, background:TYPE_COLORS[t.type], borderRadius:"3px", maxWidth:"100%" }}/>
                     </div>
-                    <span style={{ fontSize:"11px", color:"#ccc", fontFamily:"'Space Mono',monospace", width:"50px", textAlign:"right" }}>€{Math.round(t.avgRev)}</span>
+                    <span style={{ fontSize:"11px", color:"#2a2a2a", fontFamily:"'Space Mono',monospace", width:"50px", textAlign:"right" }}>€{Math.round(t.avgRev)}</span>
                   </div>
                 ))}
               </div>
@@ -493,15 +493,15 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
           <div style={S.sec}>
             <div style={S.secTitle}>Ultime 8 campagne</div>
             {CAMPAIGNS.slice(-8).reverse().map((c,i) => (
-              <div key={i} style={{ display:"grid", gridTemplateColumns:"60px 1fr 60px 55px 60px", gap:"8px", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #111", fontSize:"11px" }}>
-                <span style={{ color:"#444", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"60px 1fr 60px 55px 60px", gap:"8px", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #e8ddd0", fontSize:"11px" }}>
+                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
                 <div style={{ display:"flex", alignItems:"center", gap:"6px", overflow:"hidden" }}>
                   <span style={{ fontSize:"7px", padding:"2px 5px", borderRadius:"3px", background:TYPE_COLORS[c.type]+"1a", color:TYPE_COLORS[c.type], fontWeight:700 }}>{TYPE_LABELS[c.type]?.slice(0,5)}</span>
-                  <span style={{ color:"#bbb", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
+                  <span style={{ color:"#3a3a3a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
                 </div>
-                <span style={{ textAlign:"right", color:c.or>=68?"#4ecdc4":"#888", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
-                <span style={{ textAlign:"right", color:c.cr>=1.5?"#4ecdc4":c.cr<1?"#ff6b6b":"#888", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
-                <span style={{ textAlign:"right", color:"#c9a96e", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
+                <span style={{ textAlign:"right", color:c.or>=68?"#1a9d94":"#5a5a5a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
+                <span style={{ textAlign:"right", color:c.cr>=1.5?"#1a9d94":c.cr<1?"#d64545":"#5a5a5a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
+                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
               </div>
             ))}
           </div>
@@ -513,16 +513,16 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
           {/* STEP 0: Config */}
           {step===0 && (<div>
             {/* Context */}
-            <div style={{ ...S.sec, background:"#080808" }}>
+            <div style={{ ...S.sec, background:"#ffffff" }}>
               <div style={S.secTitle}>Contesto — ultime 4 email</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:"8px" }}>
                 {CAMPAIGNS.slice(-4).map((c,i) => (
-                  <div key={i} style={{ padding:"10px", borderRadius:"7px", background:"#0f0f0f", border:"1px solid #1a1a1a" }}>
-                    <div style={{ fontSize:"9px", color:"#444", marginBottom:"3px" }}>{c.date.slice(5)} · {TYPE_LABELS[c.type]}</div>
-                    <div style={{ fontSize:"11px", color:"#ccc", fontWeight:600, marginBottom:"4px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>"{c.subject}"</div>
+                  <div key={i} style={{ padding:"10px", borderRadius:"7px", background:"#f5f1ea", border:"1px solid #e8ddd0" }}>
+                    <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"3px" }}>{c.date.slice(5)} · {TYPE_LABELS[c.type]}</div>
+                    <div style={{ fontSize:"11px", color:"#2a2a2a", fontWeight:600, marginBottom:"4px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>"{c.subject}"</div>
                     <div style={{ display:"flex", gap:"8px", fontSize:"10px" }}>
-                      <span style={{ color:c.cr>=1.2?"#4ecdc4":"#ff6b6b" }}>CR {fmtPct(c.cr)}%</span>
-                      <span style={{ color:"#c9a96e" }}>€{Math.round(c.rev)}</span>
+                      <span style={{ color:c.cr>=1.2?"#1a9d94":"#d64545" }}>CR {fmtPct(c.cr)}%</span>
+                      <span style={{ color:"#b8924a" }}>€{Math.round(c.rev)}</span>
                     </div>
                   </div>
                 ))}
@@ -533,17 +533,17 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div style={S.secTitle}>{I.spark} Configura email</div>
               
               {/* AI Suggestion */}
-              <div style={{ background:"#c9a96e08", border:"1px solid #c9a96e1a", borderRadius:"7px", padding:"10px 14px", marginBottom:"14px", fontSize:"11px" }}>
-                <span style={{ color:"#c9a96e", fontWeight:700 }}>AI:</span>
-                <span style={{ color:"#777", marginLeft:"6px" }}>
-                  Consiglio <b style={{color:"#f0ebe3"}}>{TYPE_LABELS[suggestedType]}</b> (rev medio €{Math.round(typePerf.find(t=>t.type===suggestedType)?.avgRev||0)}).
+              <div style={{ background:"#b8924a08", border:"1px solid #b8924a1a", borderRadius:"7px", padding:"10px 14px", marginBottom:"14px", fontSize:"11px" }}>
+                <span style={{ color:"#b8924a", fontWeight:700 }}>AI:</span>
+                <span style={{ color:"#6a6a6a", marginLeft:"6px" }}>
+                  Consiglio <b style={{color:"#1a1a1a"}}>{TYPE_LABELS[suggestedType]}</b> (rev medio €{Math.round(typePerf.find(t=>t.type===suggestedType)?.avgRev||0)}).
                   {avgCr5<1.2 && " CR in calo: più prodotti cliccabili."}
                 </span>
               </div>
 
               {/* Type */}
               <div style={{ marginBottom:"14px" }}>
-                <label style={{ fontSize:"10px", color:"#444", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Tipo email</label>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Tipo email</label>
                 <div style={{ display:"flex", gap:"5px", flexWrap:"wrap" }}>
                   {Object.entries(TYPE_LABELS).map(([k,v]) => (
                     <button key={k} onClick={()=>setConfig(p=>({...p,type:k}))} style={S.btn(config.type===k,TYPE_COLORS[k])}>{v}</button>
@@ -554,26 +554,26 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               {/* Products */}
               <div style={{ marginBottom:"14px" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"6px" }}>
-                  <label style={{ fontSize:"10px", color:"#444", textTransform:"uppercase", letterSpacing:"1px" }}>Prodotti ({config.products.length} selezionati)</label>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Prodotti ({config.products.length} selezionati)</label>
                   <button onClick={()=>setShowProductPicker(!showProductPicker)} style={{ ...S.btn(showProductPicker), fontSize:"10px", padding:"4px 10px", display:"flex", alignItems:"center", gap:"4px" }}>
                     {showProductPicker ? <>{I.x} Chiudi</> : <>{I.plus} Scegli prodotti</>}
                   </button>
                 </div>
                 
                 {showProductPicker && (
-                  <div style={{ background:"#0f0f0f", border:"1px solid #1a1a1a", borderRadius:"8px", padding:"12px", maxHeight:"200px", overflowY:"auto" }}>
+                  <div style={{ background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"8px", padding:"12px", maxHeight:"200px", overflowY:"auto" }}>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:"4px" }}>
                       {ACTIVE_PRODUCTS.map(p => {
                         const sel = config.products.includes(p.id);
                         return (
                           <button key={p.id} onClick={()=>toggleProduct(p.id)} style={{
                             padding:"6px 8px", borderRadius:"5px", fontSize:"10px", textAlign:"left",
-                            background:sel?"#c9a96e15":"transparent", border:`1px solid ${sel?"#c9a96e44":"#1a1a1a"}`,
-                            color:sel?"#c9a96e":"#666", cursor:"pointer", fontFamily:"inherit",
+                            background:sel?"#b8924a15":"transparent", border:`1px solid ${sel?"#b8924a44":"#e8ddd0"}`,
+                            color:sel?"#b8924a":"#7a7a7a", cursor:"pointer", fontFamily:"inherit",
                             display:"flex", justifyContent:"space-between", alignItems:"center", transition:"all 0.1s"
                           }}>
                             <span>{p.name}{p.new?" ✦":""}</span>
-                            <span style={{ fontSize:"9px", color:"#555" }}>€{p.price}</span>
+                            <span style={{ fontSize:"9px", color:"#9a9089" }}>€{p.price}</span>
                           </button>
                         );
                       })}
@@ -586,8 +586,8 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
                     {config.products.map(id => {
                       const p = PRODUCTS.find(x=>x.id===id);
                       return p ? (
-                        <span key={id} style={{ fontSize:"10px", padding:"3px 8px", borderRadius:"4px", background:"#c9a96e15", color:"#c9a96e", display:"flex", alignItems:"center", gap:"4px" }}>
-                          {p.name} <button onClick={()=>toggleProduct(id)} style={{ background:"none", border:"none", color:"#c9a96e88", cursor:"pointer", padding:0, fontSize:"10px" }}>×</button>
+                        <span key={id} style={{ fontSize:"10px", padding:"3px 8px", borderRadius:"4px", background:"#b8924a15", color:"#b8924a", display:"flex", alignItems:"center", gap:"4px" }}>
+                          {p.name} <button onClick={()=>toggleProduct(id)} style={{ background:"none", border:"none", color:"#b8924a88", cursor:"pointer", padding:0, fontSize:"10px" }}>×</button>
                         </span>
                       ) : null;
                     })}
@@ -597,14 +597,14 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
 
               {/* Focus & Notes */}
               <div style={{ marginBottom:"14px" }}>
-                <label style={{ fontSize:"10px", color:"#444", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Focus / tema (opzionale)</label>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Focus / tema (opzionale)</label>
                 <input type="text" placeholder="es. estate, fotocromatici, look urban..." value={config.focus} onChange={e=>setConfig(p=>({...p,focus:e.target.value}))}
-                  style={{ width:"100%", padding:"9px 12px", background:"#0f0f0f", border:"1px solid #1a1a1a", borderRadius:"7px", color:"#f0ebe3", fontSize:"12px", fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+                  style={{ width:"100%", padding:"9px 12px", background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"7px", color:"#1a1a1a", fontSize:"12px", fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
               <div style={{ marginBottom:"18px" }}>
-                <label style={{ fontSize:"10px", color:"#444", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Note (opzionale)</label>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Note (opzionale)</label>
                 <textarea placeholder="es. promo 3x2 attiva, lancio nuova collezione..." value={config.notes} onChange={e=>setConfig(p=>({...p,notes:e.target.value}))} rows={2}
-                  style={{ width:"100%", padding:"9px 12px", background:"#0f0f0f", border:"1px solid #1a1a1a", borderRadius:"7px", color:"#f0ebe3", fontSize:"12px", fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
+                  style={{ width:"100%", padding:"9px 12px", background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"7px", color:"#1a1a1a", fontSize:"12px", fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
               </div>
 
               <button onClick={generateStrategy} style={S.goldBtn}>{I.spark} GENERA STRATEGIA + SUBJECT</button>
@@ -614,19 +614,19 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
           {/* STEP 1: Loading */}
           {step===1 && (
             <div style={{ ...S.sec, textAlign:"center", padding:"50px 20px" }}>
-              <div style={{ width:"36px", height:"36px", border:"3px solid #1a1a1a", borderTopColor:"#c9a96e", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
+              <div style={{ width:"36px", height:"36px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
               <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-              <div style={{ fontSize:"13px", color:"#c9a96e", fontWeight:600 }}>Claude analizza {CAMPAIGNS.length} campagne...</div>
-              <div style={{ fontSize:"11px", color:"#444", marginTop:"4px" }}>Calcolo pattern, CR, revenue per tipo</div>
+              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Claude analizza {CAMPAIGNS.length} campagne...</div>
+              <div style={{ fontSize:"11px", color:"#7a7a7a", marginTop:"4px" }}>Calcolo pattern, CR, revenue per tipo</div>
             </div>
           )}
 
           {/* STEP 2: Strategy result + Subject selection */}
           {step===2 && result && htmlStep===0 && (
             <div>
-              <div style={{ ...S.sec, borderLeft:"3px solid #c9a96e" }}>
+              <div style={{ ...S.sec, borderLeft:"3px solid #b8924a" }}>
                 <div style={S.secTitle}>{I.spark} Raccomandazione</div>
-                <p style={{ fontSize:"12px", color:"#bbb", lineHeight:1.6, margin:0 }}>{result.recommendation}</p>
+                <p style={{ fontSize:"12px", color:"#3a3a3a", lineHeight:1.6, margin:0 }}>{result.recommendation}</p>
               </div>
 
               {result.subjects?.length > 0 && (
@@ -635,21 +635,21 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
                   <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                     {result.subjects.map((s,i) => (
                       <button key={i} onClick={()=>generateHtml(i)} style={{
-                        background: selectedSubject===i ? "#c9a96e0f" : "#0f0f0f",
-                        border: `1px solid ${selectedSubject===i ? "#c9a96e44" : "#1a1a1a"}`,
+                        background: selectedSubject===i ? "#b8924a0f" : "#f5f1ea",
+                        border: `1px solid ${selectedSubject===i ? "#b8924a44" : "#e8ddd0"}`,
                         borderRadius:"8px", padding:"14px 16px", textAlign:"left", cursor:"pointer",
                         fontFamily:"inherit", transition:"all 0.15s", position:"relative"
                       }}>
-                        {s.score && <span style={{ position:"absolute", top:"8px", right:"12px", fontSize:"9px", padding:"2px 6px", borderRadius:"4px", background:s.score>=80?"#4ecdc41a":"#c9a96e1a", color:s.score>=80?"#4ecdc4":"#c9a96e", fontWeight:700 }}>{s.score}/100</span>}
-                        <div style={{ fontSize:"9px", color:"#444", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · {s.subject?.length || 0} char · clicca per generare</div>
-                        <div style={{ fontSize:"15px", fontWeight:700, color:selectedSubject===i?"#c9a96e":"#ddd", marginBottom:"4px" }}>{s.subject}</div>
-                        <div style={{ fontSize:"11px", color:"#666", fontStyle:"italic", marginBottom:"4px" }}>Preview: {s.preview}</div>
-                        <div style={{ fontSize:"10px", color:"#444" }}>{s.rationale}</div>
-                        {selectedSubject===i && <div style={{ position:"absolute", top:"50%", right:"16px", transform:"translateY(-50%)", color:"#c9a96e" }}>{I.check}</div>}
+                        {s.score && <span style={{ position:"absolute", top:"8px", right:"12px", fontSize:"9px", padding:"2px 6px", borderRadius:"4px", background:s.score>=80?"#1a9d941a":"#b8924a1a", color:s.score>=80?"#1a9d94":"#b8924a", fontWeight:700 }}>{s.score}/100</span>}
+                        <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · {s.subject?.length || 0} char · clicca per generare</div>
+                        <div style={{ fontSize:"15px", fontWeight:700, color:selectedSubject===i?"#b8924a":"#1a1a1a", marginBottom:"4px" }}>{s.subject}</div>
+                        <div style={{ fontSize:"11px", color:"#7a7a7a", fontStyle:"italic", marginBottom:"4px" }}>Preview: {s.preview}</div>
+                        <div style={{ fontSize:"10px", color:"#7a7a7a" }}>{s.rationale}</div>
+                        {selectedSubject===i && <div style={{ position:"absolute", top:"50%", right:"16px", transform:"translateY(-50%)", color:"#b8924a" }}>{I.check}</div>}
                       </button>
                     ))}
                   </div>
-                  <div style={{ marginTop:"12px", fontSize:"10px", color:"#444", textAlign:"center" }}>
+                  <div style={{ marginTop:"12px", fontSize:"10px", color:"#7a7a7a", textAlign:"center" }}>
                     Cliccando una subject si genera automaticamente l'HTML dell'email con {config.products.length || "6 default"} prodotti
                   </div>
                 </div>
@@ -657,8 +657,8 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
 
               {/* Extra info */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
-                {result.email_structure && <div style={S.sec}><div style={S.secTitle}>Struttura</div><p style={{ fontSize:"11px", color:"#888", lineHeight:1.5, margin:0 }}>{result.email_structure}</p></div>}
-                {result.products_suggestion && <div style={S.sec}><div style={S.secTitle}>Prodotti</div><p style={{ fontSize:"11px", color:"#888", lineHeight:1.5, margin:0 }}>{result.products_suggestion}</p></div>}
+                {result.email_structure && <div style={S.sec}><div style={S.secTitle}>Struttura</div><p style={{ fontSize:"11px", color:"#5a5a5a", lineHeight:1.5, margin:0 }}>{result.email_structure}</p></div>}
+                {result.products_suggestion && <div style={S.sec}><div style={S.secTitle}>Prodotti</div><p style={{ fontSize:"11px", color:"#5a5a5a", lineHeight:1.5, margin:0 }}>{result.products_suggestion}</p></div>}
               </div>
 
               <button onClick={()=>{setStep(0);setResult(null);setSelectedSubject(null);}} style={{ ...S.btn(false), marginTop:"8px", display:"flex", alignItems:"center", gap:"4px", fontSize:"11px" }}>← Riconfigura</button>
@@ -668,9 +668,9 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
           {/* HTML Generation loading */}
           {htmlStep===1 && (
             <div style={{ ...S.sec, textAlign:"center", padding:"50px 20px" }}>
-              <div style={{ width:"36px", height:"36px", border:"3px solid #1a1a1a", borderTopColor:"#c9a96e", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
-              <div style={{ fontSize:"13px", color:"#c9a96e", fontWeight:600 }}>Generazione HTML email in corso...</div>
-              <div style={{ fontSize:"11px", color:"#444", marginTop:"4px" }}>Template Occhiale Matto con {config.products.length || 6} prodotti, dark mode, CTA, mobile responsive</div>
+              <div style={{ width:"36px", height:"36px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
+              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Generazione HTML email in corso...</div>
+              <div style={{ fontSize:"11px", color:"#7a7a7a", marginTop:"4px" }}>Template Occhiale Matto con {config.products.length || 6} prodotti, dark mode, CTA, mobile responsive</div>
             </div>
           )}
 
@@ -680,13 +680,13 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               {/* Subject + Preview bar */}
               <div style={{ ...S.sec, display:"flex", gap:"16px", alignItems:"center", flexWrap:"wrap" }}>
                 <div>
-                  <div style={{ fontSize:"9px", color:"#444", textTransform:"uppercase", letterSpacing:"1px" }}>Subject</div>
-                  <div style={{ fontSize:"14px", fontWeight:700, color:"#c9a96e" }}>{result?.subjects?.[selectedSubject]?.subject || "—"}</div>
+                  <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Subject</div>
+                  <div style={{ fontSize:"14px", fontWeight:700, color:"#b8924a" }}>{result?.subjects?.[selectedSubject]?.subject || "—"}</div>
                 </div>
-                <div style={{ width:"1px", height:"30px", background:"#1a1a1a" }}/>
+                <div style={{ width:"1px", height:"30px", background:"#e8ddd0" }}/>
                 <div>
-                  <div style={{ fontSize:"9px", color:"#444", textTransform:"uppercase", letterSpacing:"1px" }}>Preview</div>
-                  <div style={{ fontSize:"12px", color:"#888" }}>{result?.subjects?.[selectedSubject]?.preview || "—"}</div>
+                  <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Preview</div>
+                  <div style={{ fontSize:"12px", color:"#5a5a5a" }}>{result?.subjects?.[selectedSubject]?.preview || "—"}</div>
                 </div>
               </div>
 
@@ -705,19 +705,19 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               {/* Output */}
               {viewMode==="code" ? (
                 <div style={{ ...S.sec, padding:0 }}>
-                  <pre style={{ margin:0, padding:"16px", fontSize:"10px", color:"#888", fontFamily:"'Space Mono',monospace", overflowX:"auto", maxHeight:"600px", overflowY:"auto", lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{htmlOutput}</pre>
+                  <pre style={{ margin:0, padding:"16px", fontSize:"10px", color:"#5a5a5a", fontFamily:"'Space Mono',monospace", overflowX:"auto", maxHeight:"600px", overflowY:"auto", lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{htmlOutput}</pre>
                 </div>
               ) : (
-                <div style={{ ...S.sec, padding:0, overflow:"hidden", display:"flex", justifyContent:"center", background: viewMode==="mobile" ? "#050505" : "transparent" }}>
+                <div style={{ ...S.sec, padding:0, overflow:"hidden", display:"flex", justifyContent:"center", background: viewMode==="mobile" ? "#faf7f2" : "transparent" }}>
                   <iframe
                     srcDoc={htmlOutput}
                     style={{
                       width: viewMode==="mobile" ? "390px" : "100%",
                       maxWidth: viewMode==="mobile" ? "390px" : "100%",
                       height: viewMode==="mobile" ? "780px" : "700px",
-                      border: viewMode==="mobile" ? "8px solid #1a1a1a" : "none",
+                      border: viewMode==="mobile" ? "8px solid #e8ddd0" : "none",
                       borderRadius: viewMode==="mobile" ? "28px" : "10px",
-                      background: "#1a1a1a",
+                      background: "#e8ddd0",
                       margin: viewMode==="mobile" ? "16px 0" : "0"
                     }}
                     title="Email Preview"
@@ -743,7 +743,7 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
             {months.map(m => <button key={m.key} onClick={()=>setFilterMonth(m.key)} style={S.btn(filterMonth===m.key)}>{m.label} ({m.n})</button>)}
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 56px 50px 45px 56px 40px", gap:"6px", padding:"6px 12px", fontSize:"9px", color:"#333", textTransform:"uppercase", letterSpacing:"1px", borderBottom:"1px solid #111" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 56px 50px 45px 56px 40px", gap:"6px", padding:"6px 12px", fontSize:"9px", color:"#5a5a5a", textTransform:"uppercase", letterSpacing:"1px", borderBottom:"1px solid #e8ddd0" }}>
             <span>Data</span><span>Subject</span><span style={{textAlign:"right"}}>OR</span><span style={{textAlign:"right"}}>CR</span><span style={{textAlign:"right"}}>Ord</span><span style={{textAlign:"right"}}>Rev</span><span style={{textAlign:"right"}}>Uns</span>
           </div>
 
@@ -752,33 +752,33 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div key={i} style={{
                 display:"grid", gridTemplateColumns:"60px 1fr 56px 50px 45px 56px 40px",
                 gap:"6px", alignItems:"center", padding:"8px 12px", fontSize:"11px",
-                background:i%2===0?"#070707":"transparent", borderLeft:`2px solid ${TYPE_COLORS[c.type]||"#333"}`,
+                background:i%2===0?"#ffffff":"transparent", borderLeft:`2px solid ${TYPE_COLORS[c.type]||"#d4c8b8"}`,
                 transition:"background 0.1s"
               }}
-              onMouseEnter={e=>e.currentTarget.style.background="#111"}
-              onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#070707":"transparent"}
+              onMouseEnter={e=>e.currentTarget.style.background="#e8ddd0"}
+              onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#ffffff":"transparent"}
               >
-                <span style={{ color:"#444", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
+                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
                 <div style={{ display:"flex", alignItems:"center", gap:"5px", overflow:"hidden" }}>
                   <span style={{ fontSize:"7px", padding:"1px 4px", borderRadius:"2px", background:TYPE_COLORS[c.type]+"15", color:TYPE_COLORS[c.type], fontWeight:700, whiteSpace:"nowrap" }}>{TYPE_LABELS[c.type]?.slice(0,5)}</span>
-                  <span style={{ color:"#bbb", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
-                  {c.html && <span style={{ fontSize:"6px", padding:"1px 3px", borderRadius:"2px", background:"#c9a96e22", color:"#c9a96e", fontWeight:700 }}>HTML</span>}
+                  <span style={{ color:"#3a3a3a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
+                  {c.html && <span style={{ fontSize:"6px", padding:"1px 3px", borderRadius:"2px", background:"#b8924a22", color:"#b8924a", fontWeight:700 }}>HTML</span>}
                 </div>
-                <span style={{ textAlign:"right", color:c.or>=70?"#4ecdc4":"#777", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
-                <span style={{ textAlign:"right", color:c.cr>=1.5?"#4ecdc4":c.cr<1?"#ff6b6b":"#777", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
-                <span style={{ textAlign:"right", color:c.orders>=7?"#4ecdc4":"#777", fontFamily:"'Space Mono',monospace" }}>{c.orders}</span>
-                <span style={{ textAlign:"right", color:"#c9a96e", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
-                <span style={{ textAlign:"right", color:c.unsub>15?"#ff6b6b":"#444", fontSize:"10px" }}>{c.unsub}</span>
+                <span style={{ textAlign:"right", color:c.or>=70?"#1a9d94":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
+                <span style={{ textAlign:"right", color:c.cr>=1.5?"#1a9d94":c.cr<1?"#d64545":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
+                <span style={{ textAlign:"right", color:c.orders>=7?"#1a9d94":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{c.orders}</span>
+                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
+                <span style={{ textAlign:"right", color:c.unsub>15?"#d64545":"#c4b8a8", fontSize:"10px" }}>{c.unsub}</span>
               </div>
             ))}
           </div>
 
-          <div style={{ marginTop:"10px", padding:"10px 14px", background:"#0a0a0a", borderRadius:"7px", display:"flex", gap:"16px", fontSize:"11px", color:"#555", flexWrap:"wrap" }}>
+          <div style={{ marginTop:"10px", padding:"10px 14px", background:"#faf7f2", borderRadius:"7px", display:"flex", gap:"16px", fontSize:"11px", color:"#9a9089", flexWrap:"wrap" }}>
             <span>{filtered.length} email</span>
-            <span>OR: <b style={{color:"#ddd"}}>{fmtPct(avg(filtered,"or"))}%</b></span>
-            <span>CR: <b style={{color:"#ddd"}}>{fmtPct(avg(filtered,"cr"))}%</b></span>
-            <span>Rev: <b style={{color:"#c9a96e"}}>€{Math.round(filtered.reduce((s,c)=>s+c.rev,0))}</b></span>
-            <span>Ordini: <b style={{color:"#ddd"}}>{filtered.reduce((s,c)=>s+c.orders,0)}</b></span>
+            <span>OR: <b style={{color:"#1a1a1a"}}>{fmtPct(avg(filtered,"or"))}%</b></span>
+            <span>CR: <b style={{color:"#1a1a1a"}}>{fmtPct(avg(filtered,"cr"))}%</b></span>
+            <span>Rev: <b style={{color:"#b8924a"}}>€{Math.round(filtered.reduce((s,c)=>s+c.rev,0))}</b></span>
+            <span>Ordini: <b style={{color:"#1a1a1a"}}>{filtered.reduce((s,c)=>s+c.orders,0)}</b></span>
           </div>
         </div>)}
       </div>
