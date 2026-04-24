@@ -1,6 +1,5 @@
 /**
  * Public scraper for occhialematto.com — reads /products.json endpoint
- * No authentication needed. Works on any Shopify store.
  */
 
 const STORE_URL = "https://www.occhialematto.com";
@@ -21,7 +20,6 @@ export type ScrapedProduct = {
   publishedAt: string;
 };
 
-// Robust tag normalizer — Shopify sometimes returns tags as string, sometimes as array
 function normalizeTags(raw: any): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map(t => String(t).trim()).filter(Boolean);
