@@ -84,10 +84,9 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
   const filter = `filter=${encodeURIComponent('equals(messages.channel,"email")')}`;
   const sort = "sort=-scheduled_at";
   const include = "include=campaign-messages";
-  const fields = "fields[campaign-message]=definition,channel";
 
   const all: any[] = [];
-  let path: string | null = `/campaigns/?${filter}&${sort}&${include}&${fields}`;
+  let path: string | null = `/campaigns/?${filter}&${sort}&${include}`;
   let included: any[] = [];
 
   while (path && all.length < maxItems) {
@@ -193,12 +192,28 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
     const sentAt: string = attrs.send_time || attrs.scheduled_at || attrs.created_at || "";
     const date = sentAt ? sentAt.slice(0, 10) : "";
 
-    // subject from first message definition
+    // Subject extraction — Klaviyo schema varies between API revisions.
+    // Try multiple paths in order of likelihood.
     const firstMsg = c._messages?.[0];
-    const def = firstMsg?.attributes?.definition || {};
-    const content = def?.content || {};
-    const subject = content.subject || attrs.name || "";
-    const preview = content.preview_text || "";
+    const msgAttrs = firstMsg?.attributes || {};
+    const def = msgAttrs.definition || {};
+    const content = def.content || {};
+    const renderOptions = msgAttrs.render_options || {};
+
+    const subject =
+      content.subject ||
+      def.subject ||
+      msgAttrs.subject ||
+      renderOptions.subject ||
+      attrs.name ||
+      "";
+
+    const preview =
+      content.preview_text ||
+      def.preview_text ||
+      msgAttrs.preview_text ||
+      renderOptions.preview_text ||
+      "";
 
     const stats = statsMap[c.id] || {};
     const recipients = Number(stats.recipients || 0);
