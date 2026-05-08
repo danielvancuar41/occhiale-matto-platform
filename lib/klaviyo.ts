@@ -87,7 +87,7 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
   const fields = "fields[campaign-message]=definition,channel";
 
   const all: any[] = [];
-  let path: string | null = `/campaigns/?${filter}&${sort}&${include}&${fields}&page[size]=50`;
+  let path: string | null = `/campaigns/?${filter}&${sort}&${include}&${fields}`;
   let included: any[] = [];
 
   while (path && all.length < maxItems) {
