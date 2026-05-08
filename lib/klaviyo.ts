@@ -82,7 +82,7 @@ async function klaviyoFetch(path: string): Promise<any> {
  */
 async function listCampaigns(maxItems = 75): Promise<any[]> {
   const filter = `filter=${encodeURIComponent('equals(messages.channel,"email")')}`;
-  const sort = "sort=-send_time";
+  const sort = "sort=-scheduled_at";
   const include = "include=campaign-messages";
   const fields = "fields[campaign-message]=definition,channel";
 
