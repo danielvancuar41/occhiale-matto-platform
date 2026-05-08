@@ -7,9 +7,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 // OCCHIALE MATTO — EMAIL MARKETING INTELLIGENCE PLATFORM v2
 // Full HTML Generator + Product Catalog + Analytics
 // All AI calls go through /api/generate (server-side, keys protected)
+// Live data: /api/catalog (Shopify scraper) + /api/klaviyo (campaigns)
 // ═══════════════════════════════════════════════════════════════════
 
-// ── PRODUCT CATALOG (from Shopify — manually synced for now) ──
+// ── PRODUCT CATALOG (fallback if scraper fails — manually synced) ──
 const PRODUCTS = [
   { id:"destino", name:"Destino", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/destino", img:"https://occhialematto.com/cdn/shop/files/destino_hero.jpg" },
   { id:"destino-xl", name:"Destino XL", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/destino-xl", img:"https://occhialematto.com/cdn/shop/files/destino_xl_hero.jpg" },
@@ -46,8 +47,8 @@ const PRODUCTS = [
 
 const FOTO_MODELS = ["prime","ghepard-goccia","ghepard-rett","elite","c-smoke","quebec","pigalle","banlieue","hype-vintage"];
 
-// ── CAMPAIGN DATA ──
-const CAMPAIGNS = [
+// ── CAMPAIGN DATA (FALLBACK ONLY — Klaviyo overrides this when available) ──
+const CAMPAIGNS_FALLBACK = [
   { date:"2025-12-17", subject:"Non è un miracolo di Natale. È il 3x2!", or:51.6, cr:2.02, rev:152.94, orders:3, unsub:13, type:"promo" },
   { date:"2025-12-19", subject:"PRIME è arrivato. Il 3×2 pure. Uno paga zero!", or:51.1, cr:1.49, rev:152.94, orders:4, unsub:2, type:"drop" },
   { date:"2025-12-24", subject:"Buone Feste da Occhiale Matto!", or:53.3, cr:0.83, rev:140.94, orders:4, unsub:14, type:"brand" },
@@ -89,6 +90,10 @@ const TYPE_COLORS = { drop:"#b8924a", multi:"#1a9d94", categoria:"#d64545", comm
 
 const fmtPct = n => n?.toFixed?.(1) ?? "0.0";
 
+// localStorage cache key for Klaviyo data
+const KLAVIYO_CACHE_KEY = "om_klaviyo_campaigns_v1";
+const KLAVIYO_CACHE_AT_KEY = "om_klaviyo_fetched_at_v1";
+
 // ── ICONS ──
 const I = {
   dash: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
@@ -104,6 +109,7 @@ const I = {
   x: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   plus: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
   mail: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>,
+  refresh: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg>,
 };
 
 // ── SPARKLINE ──
@@ -141,6 +147,21 @@ function Kpi({ label, value, trend, spark, color="#b8924a", sub }) {
   );
 }
 
+// Helper: format ago time for "Aggiornato 2h fa"
+function formatAgo(iso?: string): string {
+  if (!iso) return "mai";
+  try {
+    const ms = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "ora";
+    if (min < 60) return `${min}m fa`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h}h fa`;
+    const d = Math.floor(h / 24);
+    return `${d}g fa`;
+  } catch { return "mai"; }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════
@@ -158,6 +179,13 @@ export default function App() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [liveProducts, setLiveProducts] = useState(null); // null = not loaded yet, array = loaded
   const [catalogLoading, setCatalogLoading] = useState(false);
+
+  // Klaviyo state
+  const [liveCampaigns, setLiveCampaigns] = useState<any[] | null>(null);
+  const [klaviyoLoading, setKlaviyoLoading] = useState(false);
+  const [klaviyoError, setKlaviyoError] = useState<string | null>(null);
+  const [klaviyoFetchedAt, setKlaviyoFetchedAt] = useState<string | null>(null);
+
   const htmlRef = useRef(null);
 
   // ── Fetch live catalog from occhialematto.com on mount ──
@@ -177,49 +205,114 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Load Klaviyo campaigns: try cache first, then fetch fresh in background ──
+  useEffect(() => {
+    let cancelled = false;
+
+    // 1) Try cache for instant render
+    try {
+      const cached = typeof window !== "undefined" ? localStorage.getItem(KLAVIYO_CACHE_KEY) : null;
+      const cachedAt = typeof window !== "undefined" ? localStorage.getItem(KLAVIYO_CACHE_AT_KEY) : null;
+      if (cached) {
+        const arr = JSON.parse(cached);
+        if (Array.isArray(arr) && arr.length > 0) {
+          setLiveCampaigns(arr);
+          setKlaviyoFetchedAt(cachedAt);
+        }
+      }
+    } catch (e) { /* ignore cache errors */ }
+
+    // 2) Always fetch fresh in background on mount (non-blocking)
+    fetchKlaviyo().catch(() => { /* errors handled inside */ });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Klaviyo fetcher (manual button + auto on mount) ──
+  const fetchKlaviyo = useCallback(async () => {
+    setKlaviyoLoading(true);
+    setKlaviyoError(null);
+    try {
+      const res = await fetch("/api/klaviyo?limit=75", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Klaviyo ${res.status}`);
+      if (!Array.isArray(data.campaigns)) throw new Error("Risposta inattesa da Klaviyo");
+
+      // Klaviyo returns most-recent first; reverse to oldest-first like CAMPAIGNS_FALLBACK
+      const sorted = [...data.campaigns].sort((a, b) =>
+        (a.date || "").localeCompare(b.date || "")
+      );
+
+      setLiveCampaigns(sorted);
+      const now = data.fetchedAt || new Date().toISOString();
+      setKlaviyoFetchedAt(now);
+
+      // Persist to cache
+      try {
+        localStorage.setItem(KLAVIYO_CACHE_KEY, JSON.stringify(sorted));
+        localStorage.setItem(KLAVIYO_CACHE_AT_KEY, now);
+      } catch (e) { /* localStorage may be full; ignore */ }
+
+    } catch (err: any) {
+      console.error("[klaviyo] fetch failed:", err);
+      setKlaviyoError(err.message || "Errore Klaviyo");
+    } finally {
+      setKlaviyoLoading(false);
+    }
+  }, []);
+
   // Use live products if available, fallback to hardcoded
   const ACTIVE_PRODUCTS = liveProducts && liveProducts.length > 0 ? liveProducts : PRODUCTS;
 
-  // ── Computed ──
+  // Use live campaigns if available, fallback to hardcoded
+  const CAMPAIGNS = liveCampaigns && liveCampaigns.length > 0 ? liveCampaigns : CAMPAIGNS_FALLBACK;
+  const usingLiveCampaigns = !!(liveCampaigns && liveCampaigns.length > 0);
+
+  // ── Computed (recalculates when CAMPAIGNS source changes) ──
   const last5 = CAMPAIGNS.slice(-5);
   const prev5 = CAMPAIGNS.slice(-10,-5);
-  const avg = (arr, k) => arr.reduce((s,c)=>s+c[k],0)/arr.length;
+  const avg = (arr, k) => arr.length ? arr.reduce((s,c)=>s+(c[k]||0),0)/arr.length : 0;
   const avgOr5 = avg(last5,"or"), avgCr5 = avg(last5,"cr"), avgRev5 = avg(last5,"rev");
   const pOr5 = avg(prev5,"or"), pCr5 = avg(prev5,"cr"), pRev5 = avg(prev5,"rev");
-  const tOr = ((avgOr5-pOr5)/pOr5)*100, tCr = ((avgCr5-pCr5)/pCr5)*100, tRev = ((avgRev5-pRev5)/pRev5)*100;
-  const totalRev = CAMPAIGNS.reduce((s,c)=>s+c.rev,0);
-  const totalOrd = CAMPAIGNS.reduce((s,c)=>s+c.orders,0);
+  const tOr = pOr5 ? ((avgOr5-pOr5)/pOr5)*100 : 0;
+  const tCr = pCr5 ? ((avgCr5-pCr5)/pCr5)*100 : 0;
+  const tRev = pRev5 ? ((avgRev5-pRev5)/pRev5)*100 : 0;
+  const totalRev = CAMPAIGNS.reduce((s,c)=>s+(c.rev||0),0);
+  const totalOrd = CAMPAIGNS.reduce((s,c)=>s+(c.orders||0),0);
 
   const months = useMemo(() => {
     const m = {};
     CAMPAIGNS.forEach(c => {
+      if (!c.date) return;
       const k = c.date.slice(0,7);
       if (!m[k]) m[k] = {cps:[], rev:0, ord:0, orS:0, crS:0};
-      m[k].cps.push(c); m[k].rev+=c.rev; m[k].ord+=c.orders; m[k].orS+=c.or; m[k].crS+=c.cr;
+      m[k].cps.push(c); m[k].rev+=(c.rev||0); m[k].ord+=(c.orders||0); m[k].orS+=(c.or||0); m[k].crS+=(c.cr||0);
     });
-    return Object.entries(m).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>({
+    return Object.entries(m).sort(([a],[b])=>(a as string).localeCompare(b as string)).map(([k,v]:any)=>({
       key:k, label: ["","Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][parseInt(k.slice(5,7))]+" "+k.slice(2,4),
       n:v.cps.length, rev:v.rev, ord:v.ord, avgOr:v.orS/v.cps.length, avgCr:v.crS/v.cps.length
     }));
-  }, []);
+  }, [CAMPAIGNS]);
 
   const typePerf = useMemo(() => {
     const tp = {};
     CAMPAIGNS.forEach(c => {
-      if(!tp[c.type]) tp[c.type]={n:0,rev:0,ord:0,crS:0};
-      tp[c.type].n++; tp[c.type].rev+=c.rev; tp[c.type].ord+=c.orders; tp[c.type].crS+=c.cr;
+      const t = c.type || "brand";
+      if(!tp[t]) tp[t]={n:0,rev:0,ord:0,crS:0};
+      tp[t].n++; tp[t].rev+=(c.rev||0); tp[t].ord+=(c.orders||0); tp[t].crS+=(c.cr||0);
     });
-    return Object.entries(tp).map(([k,v])=>({type:k,...v,avgRev:v.rev/v.n,avgCr:v.crS/v.n})).sort((a,b)=>b.avgRev-a.avgRev);
-  }, []);
+    return Object.entries(tp).map(([k,v]:any)=>({type:k,...v,avgRev:v.rev/v.n,avgCr:v.crS/v.n})).sort((a,b)=>b.avgRev-a.avgRev);
+  }, [CAMPAIGNS]);
 
   const suggestedType = useMemo(() => {
     const recent = CAMPAIGNS.slice(-3).map(c=>c.type);
     if(!recent.includes("multi")) return "multi";
     if(!recent.includes("categoria")) return "categoria";
     return "multi";
-  }, []);
+  }, [CAMPAIGNS]);
 
-  const filtered = filterMonth==="all" ? CAMPAIGNS : CAMPAIGNS.filter(c=>c.date.startsWith(filterMonth));
+  const filtered = filterMonth==="all" ? CAMPAIGNS : CAMPAIGNS.filter(c=>c.date?.startsWith(filterMonth));
 
   // ── Product toggle ──
   const toggleProduct = (id) => {
@@ -230,41 +323,11 @@ export default function App() {
   const generateStrategy = useCallback(async () => {
     setStep(1);
     const last8 = CAMPAIGNS.slice(-8);
-    const bestCR = [...CAMPAIGNS].sort((a,b)=>b.cr-a.cr).slice(0,8);
-    const bestRev = [...CAMPAIGNS].sort((a,b)=>b.rev-a.rev).slice(0,5);
+    const bestCR = [...CAMPAIGNS].sort((a,b)=>(b.cr||0)-(a.cr||0)).slice(0,8);
+    const bestRev = [...CAMPAIGNS].sort((a,b)=>(b.rev||0)-(a.rev||0)).slice(0,5);
     const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
 
-    const sysPrompt = `Sei il copywriter strategico di Occhiale Matto, brand italiano urban di occhiali da sole (€24.99-€59.99). Stile: provocatorio, diretto, frasi corte a effetto. Mai aziendalese. Dare del "tu".
-
-DATI PERFORMANCE REALI:
-- Subject ≤22 char: OR medio 69.1%, Rev medio €274
-- Subject vaghe ("Lo sapevi?", "Uno, sempre giusto!"): CR <1%, Rev <€150
-- Pattern "[Nome] è arrivato!": media CR 1.57%, Rev €274
-- Email multi-prodotto: Rev medio €301 vs €204 singolo (+48%)
-- TOP CR: ${bestCR.slice(0,5).map(c=>`"${c.subject}" ${c.cr}%`).join(", ")}
-- TOP REV: ${bestRev.map(c=>`"${c.subject}" €${Math.round(c.rev)}`).join(", ")}
-- ULTIME 8: ${last8.map(c=>`${c.date.slice(5)}: "${c.subject}" tipo:${c.type} CR:${c.cr}% €${Math.round(c.rev)}`).join(" | ")}
-- PROBLEMA ATTUALE: CR aprile 0.90% (in calo da 1.4%). Servono subject con hook forte e email con più prodotti cliccabili.
-${selectedProds.length > 0 ? `\nPRODOTTI SELEZIONATI: ${selectedProds.map(p=>`${p.name} €${p.price}`).join(", ")}` : ""}
-
-Rispondi SOLO in JSON valido senza backtick. Struttura:
-{
-  "recommendation": "2-3 frasi su perché questo tipo di email adesso",
-  "subjects": [
-    {"subject": "max 22 char, con hook forte", "preview": "preview text 40-60 char", "rationale": "perché funzionerà", "score": 85},
-    {"subject": "...", "preview": "...", "rationale": "...", "score": 80},
-    {"subject": "...", "preview": "...", "rationale": "...", "score": 75}
-  ],
-  "email_structure": "descrizione sezioni email (hero, griglia prodotti, CTA, etc)",
-  "products_suggestion": "quali prodotti mettere e perché",
-  "headline": "headline hero provocatoria in CAPS",
-  "subheadline": "sottotitolo 2 righe max",
-  "best_day": "mercoledì o giovedì, con orario",
-  "warnings": ["avvisi basati sui trend"]
-}`;
-
     const typeLabel = TYPE_LABELS[config.type] || config.type;
-    const userPrompt = `Genera proposta per email tipo: ${typeLabel}.${config.focus ? ` Focus: ${config.focus}.` : ""}${config.notes ? ` Note: ${config.notes}.` : ""}${selectedProds.length > 0 ? ` Prodotti scelti: ${selectedProds.map(p=>p.name).join(", ")}.` : ""} Le ultime 5 email hanno CR medio 0.90%. Serve invertire il trend.`;
 
     try {
       const res = await fetch("/api/generate", {
@@ -272,35 +335,35 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "strategy",
-          emailType: TYPE_LABELS[config.type] || config.type,
+          emailType: typeLabel,
           selectedProducts: selectedProds,
           recentCampaigns: last8.map(c => ({
-            name: c.subject,
-            subject: c.subject,
-            sendDate: c.date,
-            weekday: new Date(c.date).toLocaleDateString("en-US", { weekday: "long" }),
-            recipients: 0,
-            opens: 0,
-            openRate: c.or,
-            clicks: 0,
-            clickRate: c.cr,
-            orders: c.orders,
-            revenue: c.rev,
-            unsubscribes: c.unsub
+            name: c.subject || "",
+            subject: c.subject || "",
+            sendDate: c.date || "",
+            weekday: c.date ? new Date(c.date).toLocaleDateString("en-US", { weekday: "long" }) : "",
+            recipients: c.recipients || 0,
+            opens: c.opens || 0,
+            openRate: c.or || 0,
+            clicks: c.clicks || 0,
+            clickRate: c.cr || 0,
+            orders: c.orders || 0,
+            revenue: c.rev || 0,
+            unsubscribes: c.unsub || 0
           })),
           topPerformers: bestRev.map(c => ({
-            name: c.subject,
-            subject: c.subject,
-            sendDate: c.date,
+            name: c.subject || "",
+            subject: c.subject || "",
+            sendDate: c.date || "",
             weekday: "",
             recipients: 0,
             opens: 0,
-            openRate: c.or,
+            openRate: c.or || 0,
             clicks: 0,
-            clickRate: c.cr,
-            orders: c.orders,
-            revenue: c.rev,
-            unsubscribes: c.unsub
+            clickRate: c.cr || 0,
+            orders: c.orders || 0,
+            revenue: c.rev || 0,
+            unsubscribes: c.unsub || 0
           })),
           focus: config.focus,
           notes: config.notes
@@ -331,16 +394,14 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
       setResult({ recommendation:`Errore: ${e.message}`, subjects:[], warnings:[e.message] });
       setStep(2);
     }
-  }, [config]);
+  }, [config, CAMPAIGNS, ACTIVE_PRODUCTS]);
 
   // ── GENERATE HTML (Step 2 → 3) ──
   const generateHtml = useCallback(async (overrideIndex?: number) => {
-    // Accept either a direct index (fresh click) or read from state
     const idx = typeof overrideIndex === "number" ? overrideIndex : selectedSubject;
     if (idx === null || idx === undefined || !result) return;
     if (!result.subjects || !result.subjects[idx]) return;
 
-    // Sync state so UI shows correct subject
     if (idx !== selectedSubject) setSelectedSubject(idx);
     setHtmlStep(1);
 
@@ -348,7 +409,6 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
     const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
     const prodsToUse = selectedProds.length > 0 ? selectedProds : ACTIVE_PRODUCTS.slice(0,6);
 
-    // 4-minute timeout via AbortController — prevents UI from hanging forever
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 240000);
 
@@ -377,7 +437,6 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
       });
       clearTimeout(timeoutId);
 
-      // Robust response parsing — never assume JSON
       const text = await res.text();
       let data: any;
       try {
@@ -428,8 +487,29 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div style={{ fontSize:"9px", color:"#7a7a7a", letterSpacing:"2px" }}>EMAIL INTELLIGENCE v2</div>
             </div>
           </div>
-          <div style={{ fontSize:"9px", color:"#5a5a5a", padding:"4px 10px", border:"1px solid #e8ddd0", borderRadius:"5px" }}>
-            {CAMPAIGNS.length} campagne · {ACTIVE_PRODUCTS.length} prodotti{liveProducts ? " live" : ""}
+          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+            {/* Aggiorna campagne button */}
+            <button
+              onClick={fetchKlaviyo}
+              disabled={klaviyoLoading}
+              title={klaviyoFetchedAt ? `Aggiornato ${formatAgo(klaviyoFetchedAt)}` : "Aggiorna campagne da Klaviyo"}
+              style={{
+                display:"flex", alignItems:"center", gap:"5px",
+                padding:"6px 10px", borderRadius:"6px",
+                background: klaviyoLoading ? "#f5f1ea" : (klaviyoError ? "#d645450a" : "#ffffff"),
+                border:`1px solid ${klaviyoError ? "#d6454544" : "#e8ddd0"}`,
+                color: klaviyoError ? "#d64545" : "#5a5a5a",
+                fontSize:"10px", fontWeight:600, cursor: klaviyoLoading ? "wait" : "pointer",
+                fontFamily:"inherit", letterSpacing:"0.3px",
+                transition:"all 0.15s"
+              }}
+            >
+              <span style={{ display:"inline-flex", animation: klaviyoLoading ? "spin 1s linear infinite" : "none" }}>{I.refresh}</span>
+              {klaviyoLoading ? "Aggiornamento..." : (klaviyoError ? "Riprova" : "Aggiorna")}
+            </button>
+            <div style={{ fontSize:"9px", color:"#5a5a5a", padding:"4px 10px", border:"1px solid #e8ddd0", borderRadius:"5px" }}>
+              {CAMPAIGNS.length} campagne{usingLiveCampaigns ? " live" : ""} · {ACTIVE_PRODUCTS.length} prodotti{liveProducts ? " live" : ""}
+            </div>
           </div>
         </div>
         <div style={{ display:"flex", maxWidth:"1100px", margin:"0 auto" }}>
@@ -439,22 +519,35 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
         </div>
       </div>
 
+      {/* Klaviyo error banner (subtle, non-blocking) */}
+      {klaviyoError && (
+        <div style={{ maxWidth:"1100px", margin:"10px auto 0", padding:"0 20px" }}>
+          <div style={{ background:"#d645450a", border:"1px solid #d6454522", borderRadius:"7px", padding:"8px 14px", display:"flex", alignItems:"center", gap:"8px", fontSize:"11px" }}>
+            <span style={{ color:"#d64545" }}>{I.alert}</span>
+            <span style={{ color:"#5a5a5a", flex:1 }}>
+              Klaviyo non risponde. Mostro {usingLiveCampaigns ? "ultima cache disponibile" : "dati storici di backup"}.
+              <span style={{ color:"#9a9089", marginLeft:"6px" }}>({klaviyoError})</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       <div style={{ padding:"18px 20px", maxWidth:"1100px", margin:"0 auto" }}>
 
         {/* ═══ DASHBOARD ═══ */}
         {tab==="dashboard" && (<div>
           <div style={{ display:"flex", gap:"10px", flexWrap:"wrap", marginBottom:"14px" }}>
-            <Kpi label="Open Rate" value={`${fmtPct(avgOr5)}%`} trend={tOr} color="#1a9d94" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.or)} color="#1a9d94"/>}/>
-            <Kpi label="Click Rate" value={`${fmtPct(avgCr5)}%`} trend={tCr} color={avgCr5<1?"#d64545":"#b8924a"} sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.cr)} color={avgCr5<1?"#d64545":"#b8924a"}/>}/>
-            <Kpi label="Rev medio" value={`€${Math.round(avgRev5)}`} trend={tRev} color="#b8924a" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.rev)} color="#b8924a"/>}/>
+            <Kpi label="Open Rate" value={`${fmtPct(avgOr5)}%`} trend={tOr} color="#1a9d94" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.or||0)} color="#1a9d94"/>}/>
+            <Kpi label="Click Rate" value={`${fmtPct(avgCr5)}%`} trend={tCr} color={avgCr5<1?"#d64545":"#b8924a"} sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.cr||0)} color={avgCr5<1?"#d64545":"#b8924a"}/>}/>
+            <Kpi label="Rev medio" value={`€${Math.round(avgRev5)}`} trend={tRev} color="#b8924a" sub="media ultime 5" spark={<Spark data={CAMPAIGNS.slice(-12).map(c=>c.rev||0)} color="#b8924a"/>}/>
             <Kpi label="Totale" value={`€${(totalRev/1000).toFixed(1)}k`} color="#7c5cd4" sub={`${totalOrd} ordini`}/>
           </div>
 
-          {avgCr5 < 1.2 && (
+          {avgCr5 > 0 && avgCr5 < 1.2 && (
             <div style={{ background:"#d645450a", border:"1px solid #d6454522", borderRadius:"8px", padding:"12px 16px", marginBottom:"14px", display:"flex", gap:"10px" }}>
               <span style={{ color:"#d64545", marginTop:"1px" }}>{I.alert}</span>
               <div style={{ fontSize:"12px", color:"#5a5a5a", lineHeight:1.5 }}>
-                <b style={{color:"#d64545"}}>CR in calo critico: {fmtPct(avgCr5)}%</b> — Le multi-prodotto hanno CR 1.53% vs 0.90% attuale. Servono più prodotti cliccabili e subject con hook.
+                <b style={{color:"#d64545"}}>CR in calo critico: {fmtPct(avgCr5)}%</b> — Le multi-prodotto hanno CR storica più alta. Servono più prodotti cliccabili e subject con hook.
               </div>
             </div>
           )}
@@ -464,7 +557,7 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div style={S.secTitle}>Revenue mensile</div>
               <div style={{ display:"flex", alignItems:"flex-end", gap:"6px", height:"120px" }}>
                 {months.map((m,i) => {
-                  const mx = Math.max(...months.map(x=>x.rev))*1.1;
+                  const mx = Math.max(...months.map(x=>x.rev), 1)*1.1;
                   const h = mx>0?(m.rev/mx)*100:0;
                   return (<div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"3px" }}>
                     <span style={{ fontSize:"8px", color:"#5a5a5a" }}>€{Math.round(m.rev)}</span>
@@ -479,9 +572,9 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
                 {typePerf.slice(0,5).map(t => (
                   <div key={t.type} style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                    <span style={{ width:"60px", fontSize:"9px", color:TYPE_COLORS[t.type], fontWeight:700, textTransform:"uppercase" }}>{TYPE_LABELS[t.type]?.slice(0,8)}</span>
+                    <span style={{ width:"60px", fontSize:"9px", color:TYPE_COLORS[t.type]||"#5a5a5a", fontWeight:700, textTransform:"uppercase" }}>{TYPE_LABELS[t.type]?.slice(0,8) || t.type}</span>
                     <div style={{ flex:1, height:"16px", background:"#e8ddd0", borderRadius:"3px", overflow:"hidden" }}>
-                      <div style={{ height:"100%", width:`${(t.avgRev/400)*100}%`, background:TYPE_COLORS[t.type], borderRadius:"3px", maxWidth:"100%" }}/>
+                      <div style={{ height:"100%", width:`${Math.min((t.avgRev/400)*100, 100)}%`, background:TYPE_COLORS[t.type]||"#b8924a", borderRadius:"3px" }}/>
                     </div>
                     <span style={{ fontSize:"11px", color:"#2a2a2a", fontFamily:"'Space Mono',monospace", width:"50px", textAlign:"right" }}>€{Math.round(t.avgRev)}</span>
                   </div>
@@ -494,14 +587,14 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
             <div style={S.secTitle}>Ultime 8 campagne</div>
             {CAMPAIGNS.slice(-8).reverse().map((c,i) => (
               <div key={i} style={{ display:"grid", gridTemplateColumns:"60px 1fr 60px 55px 60px", gap:"8px", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #e8ddd0", fontSize:"11px" }}>
-                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
+                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date?.slice(5) || "—"}</span>
                 <div style={{ display:"flex", alignItems:"center", gap:"6px", overflow:"hidden" }}>
-                  <span style={{ fontSize:"7px", padding:"2px 5px", borderRadius:"3px", background:TYPE_COLORS[c.type]+"1a", color:TYPE_COLORS[c.type], fontWeight:700 }}>{TYPE_LABELS[c.type]?.slice(0,5)}</span>
+                  <span style={{ fontSize:"7px", padding:"2px 5px", borderRadius:"3px", background:(TYPE_COLORS[c.type]||"#b8924a")+"1a", color:TYPE_COLORS[c.type]||"#b8924a", fontWeight:700 }}>{TYPE_LABELS[c.type]?.slice(0,5) || c.type?.slice(0,5)}</span>
                   <span style={{ color:"#3a3a3a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
                 </div>
                 <span style={{ textAlign:"right", color:c.or>=68?"#1a9d94":"#5a5a5a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
                 <span style={{ textAlign:"right", color:c.cr>=1.5?"#1a9d94":c.cr<1?"#d64545":"#5a5a5a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
-                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
+                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev||0)}</span>
               </div>
             ))}
           </div>
@@ -514,15 +607,15 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
           {step===0 && (<div>
             {/* Context */}
             <div style={{ ...S.sec, background:"#ffffff" }}>
-              <div style={S.secTitle}>Contesto — ultime 4 email</div>
+              <div style={S.secTitle}>Contesto — ultime 4 email{usingLiveCampaigns ? " (live)" : ""}</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:"8px" }}>
                 {CAMPAIGNS.slice(-4).map((c,i) => (
                   <div key={i} style={{ padding:"10px", borderRadius:"7px", background:"#f5f1ea", border:"1px solid #e8ddd0" }}>
-                    <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"3px" }}>{c.date.slice(5)} · {TYPE_LABELS[c.type]}</div>
+                    <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"3px" }}>{c.date?.slice(5)} · {TYPE_LABELS[c.type] || c.type}</div>
                     <div style={{ fontSize:"11px", color:"#2a2a2a", fontWeight:600, marginBottom:"4px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>"{c.subject}"</div>
                     <div style={{ display:"flex", gap:"8px", fontSize:"10px" }}>
                       <span style={{ color:c.cr>=1.2?"#1a9d94":"#d64545" }}>CR {fmtPct(c.cr)}%</span>
-                      <span style={{ color:"#b8924a" }}>€{Math.round(c.rev)}</span>
+                      <span style={{ color:"#b8924a" }}>€{Math.round(c.rev||0)}</span>
                     </div>
                   </div>
                 ))}
@@ -536,8 +629,8 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               <div style={{ background:"#b8924a08", border:"1px solid #b8924a1a", borderRadius:"7px", padding:"10px 14px", marginBottom:"14px", fontSize:"11px" }}>
                 <span style={{ color:"#b8924a", fontWeight:700 }}>AI:</span>
                 <span style={{ color:"#6a6a6a", marginLeft:"6px" }}>
-                  Consiglio <b style={{color:"#1a1a1a"}}>{TYPE_LABELS[suggestedType]}</b> (rev medio €{Math.round(typePerf.find(t=>t.type===suggestedType)?.avgRev||0)}).
-                  {avgCr5<1.2 && " CR in calo: più prodotti cliccabili."}
+                  Consiglio <b style={{color:"#1a1a1a"}}>{TYPE_LABELS[suggestedType] || suggestedType}</b> (rev medio €{Math.round(typePerf.find(t=>t.type===suggestedType)?.avgRev||0)}).
+                  {avgCr5>0 && avgCr5<1.2 && " CR in calo: più prodotti cliccabili."}
                 </span>
               </div>
 
@@ -584,7 +677,7 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
                 {config.products.length > 0 && !showProductPicker && (
                   <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
                     {config.products.map(id => {
-                      const p = PRODUCTS.find(x=>x.id===id);
+                      const p = ACTIVE_PRODUCTS.find(x=>x.id===id);
                       return p ? (
                         <span key={id} style={{ fontSize:"10px", padding:"3px 8px", borderRadius:"4px", background:"#b8924a15", color:"#b8924a", display:"flex", alignItems:"center", gap:"4px" }}>
                           {p.name} <button onClick={()=>toggleProduct(id)} style={{ background:"none", border:"none", color:"#b8924a88", cursor:"pointer", padding:0, fontSize:"10px" }}>×</button>
@@ -758,17 +851,17 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
               onMouseEnter={e=>e.currentTarget.style.background="#e8ddd0"}
               onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#ffffff":"transparent"}
               >
-                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date.slice(5)}</span>
+                <span style={{ color:"#7a7a7a", fontFamily:"'Space Mono',monospace", fontSize:"10px" }}>{c.date?.slice(5) || "—"}</span>
                 <div style={{ display:"flex", alignItems:"center", gap:"5px", overflow:"hidden" }}>
-                  <span style={{ fontSize:"7px", padding:"1px 4px", borderRadius:"2px", background:TYPE_COLORS[c.type]+"15", color:TYPE_COLORS[c.type], fontWeight:700, whiteSpace:"nowrap" }}>{TYPE_LABELS[c.type]?.slice(0,5)}</span>
+                  <span style={{ fontSize:"7px", padding:"1px 4px", borderRadius:"2px", background:(TYPE_COLORS[c.type]||"#b8924a")+"15", color:TYPE_COLORS[c.type]||"#b8924a", fontWeight:700, whiteSpace:"nowrap" }}>{TYPE_LABELS[c.type]?.slice(0,5) || c.type?.slice(0,5)}</span>
                   <span style={{ color:"#3a3a3a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.subject}</span>
                   {c.html && <span style={{ fontSize:"6px", padding:"1px 3px", borderRadius:"2px", background:"#b8924a22", color:"#b8924a", fontWeight:700 }}>HTML</span>}
                 </div>
                 <span style={{ textAlign:"right", color:c.or>=70?"#1a9d94":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.or)}%</span>
                 <span style={{ textAlign:"right", color:c.cr>=1.5?"#1a9d94":c.cr<1?"#d64545":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{fmtPct(c.cr)}%</span>
-                <span style={{ textAlign:"right", color:c.orders>=7?"#1a9d94":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{c.orders}</span>
-                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev)}</span>
-                <span style={{ textAlign:"right", color:c.unsub>15?"#d64545":"#c4b8a8", fontSize:"10px" }}>{c.unsub}</span>
+                <span style={{ textAlign:"right", color:c.orders>=7?"#1a9d94":"#6a6a6a", fontFamily:"'Space Mono',monospace" }}>{c.orders||0}</span>
+                <span style={{ textAlign:"right", color:"#b8924a", fontWeight:700, fontFamily:"'Space Mono',monospace" }}>€{Math.round(c.rev||0)}</span>
+                <span style={{ textAlign:"right", color:c.unsub>15?"#d64545":"#c4b8a8", fontSize:"10px" }}>{c.unsub||0}</span>
               </div>
             ))}
           </div>
@@ -777,11 +870,14 @@ Rispondi SOLO in JSON valido senza backtick. Struttura:
             <span>{filtered.length} email</span>
             <span>OR: <b style={{color:"#1a1a1a"}}>{fmtPct(avg(filtered,"or"))}%</b></span>
             <span>CR: <b style={{color:"#1a1a1a"}}>{fmtPct(avg(filtered,"cr"))}%</b></span>
-            <span>Rev: <b style={{color:"#b8924a"}}>€{Math.round(filtered.reduce((s,c)=>s+c.rev,0))}</b></span>
-            <span>Ordini: <b style={{color:"#1a1a1a"}}>{filtered.reduce((s,c)=>s+c.orders,0)}</b></span>
+            <span>Rev: <b style={{color:"#b8924a"}}>€{Math.round(filtered.reduce((s,c)=>s+(c.rev||0),0))}</b></span>
+            <span>Ordini: <b style={{color:"#1a1a1a"}}>{filtered.reduce((s,c)=>s+(c.orders||0),0)}</b></span>
           </div>
         </div>)}
       </div>
+
+      {/* Global keyframes for spin */}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
