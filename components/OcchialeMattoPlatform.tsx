@@ -88,6 +88,20 @@ const CAMPAIGNS_FALLBACK = [
 const TYPE_LABELS = { drop:"Nuovo Arrivo", multi:"Multi-Prodotto", categoria:"Categoria", community:"Community", promo:"Promo", brand:"Brand", stagionale:"Stagionale" };
 const TYPE_COLORS = { drop:"#b8924a", multi:"#1a9d94", categoria:"#d64545", community:"#7c5cd4", promo:"#d97706", brand:"#52525b", stagionale:"#10b981" };
 
+// ── TEMPLATE STYLES (visual aesthetics for HTML generator) ──
+const TEMPLATE_OPTIONS = [
+  { id:"classico", label:"Classico", desc:"Identità OM storica, griglia, oro, sezioni alternate" },
+  { id:"minimal", label:"Minimal", desc:"Pulito, ariato, prodotto-centrico, niente decorazioni" },
+  { id:"bold", label:"Bold", desc:"Tipografia gigante, contrasti forti, vibe drop/urgenza" },
+  { id:"editorial", label:"Editorial", desc:"Magazine-style, foto piene, serif elegante" },
+];
+
+// ── COLOR MODES (light/dark for HTML output) ──
+const COLOR_MODES = [
+  { id:"light", label:"Chiaro", bg:"#faf7f2", text:"#1a1a1a", accent:"#b8924a" },
+  { id:"dark", label:"Scuro", bg:"#1a1a1a", text:"#faf7f2", accent:"#b8924a" },
+];
+
 const fmtPct = n => n?.toFixed?.(1) ?? "0.0";
 
 // localStorage cache key for Klaviyo data
@@ -169,7 +183,7 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [step, setStep] = useState(0);
   const [result, setResult] = useState(null);
-  const [config, setConfig] = useState({ type:"multi", focus:"", notes:"", products:[] });
+  const [config, setConfig] = useState({ type:"multi", focus:"", notes:"", products:[], templateStyle:"classico", colorMode:"light" });
   const [htmlOutput, setHtmlOutput] = useState("");
   const [htmlStep, setHtmlStep] = useState(0); // 0=not started, 1=generating, 2=done
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -423,6 +437,8 @@ export default function App() {
           chosenSubject: subj.subject,
           chosenPreview: subj.preview,
           strategy: result.email_structure || result.recommendation || "",
+          templateStyle: config.templateStyle || "classico",
+          colorMode: config.colorMode || "light",
           selectedProducts: prodsToUse.map(p => ({
             id: p.id,
             name: p.name,
@@ -641,6 +657,58 @@ export default function App() {
                   {Object.entries(TYPE_LABELS).map(([k,v]) => (
                     <button key={k} onClick={()=>setConfig(p=>({...p,type:k}))} style={S.btn(config.type===k,TYPE_COLORS[k])}>{v}</button>
                   ))}
+                </div>
+              </div>
+
+              {/* Template Style */}
+              <div style={{ marginBottom:"14px" }}>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Stile grafico</label>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"6px" }}>
+                  {TEMPLATE_OPTIONS.map(t => {
+                    const sel = config.templateStyle === t.id;
+                    return (
+                      <button key={t.id} onClick={()=>setConfig(p=>({...p,templateStyle:t.id}))} style={{
+                        padding:"10px 12px", borderRadius:"7px", textAlign:"left",
+                        background: sel ? "#b8924a10" : "#f5f1ea",
+                        border: `1px solid ${sel ? "#b8924a55" : "#e8ddd0"}`,
+                        color: sel ? "#1a1a1a" : "#5a5a5a",
+                        cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s"
+                      }}>
+                        <div style={{ fontSize:"12px", fontWeight:700, color:sel?"#b8924a":"#1a1a1a", marginBottom:"3px", textTransform:"uppercase", letterSpacing:"1px" }}>{t.label}</div>
+                        <div style={{ fontSize:"10px", color:"#7a7a7a", lineHeight:1.4 }}>{t.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Color Mode */}
+              <div style={{ marginBottom:"14px" }}>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Tema colori</label>
+                <div style={{ display:"flex", gap:"6px" }}>
+                  {COLOR_MODES.map(m => {
+                    const sel = config.colorMode === m.id;
+                    return (
+                      <button key={m.id} onClick={()=>setConfig(p=>({...p,colorMode:m.id}))} style={{
+                        flex:1, padding:"12px 14px", borderRadius:"7px", textAlign:"left",
+                        background: sel ? m.bg : "#f5f1ea",
+                        border: `1.5px solid ${sel ? "#b8924a" : "#e8ddd0"}`,
+                        color: sel ? m.text : "#5a5a5a",
+                        cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                        display:"flex", alignItems:"center", gap:"10px"
+                      }}>
+                        <div style={{ display:"flex", gap:"3px" }}>
+                          <div style={{ width:"16px", height:"16px", borderRadius:"50%", background:m.bg, border:`1px solid ${sel?m.text:"#e8ddd0"}` }}/>
+                          <div style={{ width:"16px", height:"16px", borderRadius:"50%", background:m.text, border:"1px solid #e8ddd0" }}/>
+                          <div style={{ width:"16px", height:"16px", borderRadius:"50%", background:m.accent, border:"1px solid #e8ddd0" }}/>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:"12px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px" }}>{m.label}</div>
+                          <div style={{ fontSize:"9px", opacity:0.7 }}>bg {m.bg} · accent {m.accent}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
