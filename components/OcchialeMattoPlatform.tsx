@@ -161,6 +161,64 @@ function Kpi({ label, value, trend, spark, color="#b8924a", sub }) {
   );
 }
 
+// ── ADV numeric input field ──
+function NumField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label style={{ fontSize:"9px", color:"#9a9089", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"3px" }}>{label}</label>
+      <input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="0"
+        style={{
+          width:"100%", padding:"7px 9px", fontSize:"12px",
+          border:"1px solid #e8ddd0", borderRadius:"5px",
+          background:"#ffffff", color:"#1a1a1a", outline:"none",
+          fontFamily:"'Space Mono', monospace"
+        }}
+        onFocus={e => e.currentTarget.style.borderColor = "#b8924a"}
+        onBlur={e => e.currentTarget.style.borderColor = "#e8ddd0"}
+      />
+    </div>
+  );
+}
+
+// ── ADV KPI Card (compact, with delta) ──
+function AdvKpiCard({ label, value, delta, invertDelta = false, highlight }: {
+  label: string;
+  value: string;
+  delta: { val: number; label: string; color: string } | null;
+  invertDelta?: boolean; // if true (e.g. for "spesa"), positive delta is bad
+  highlight?: "good" | "bad" | "warn" | "neutral";
+}) {
+  // Adjust delta color if invertDelta
+  let deltaColor = delta?.color;
+  if (delta && invertDelta) {
+    deltaColor = delta.val > 0 ? "#d64545" : delta.val < 0 ? "#1a9d94" : "#7a7a7a";
+  }
+  const borderColor =
+    highlight === "good" ? "#1a9d94" :
+    highlight === "bad" ? "#d64545" :
+    highlight === "warn" ? "#b8924a" : "#e8ddd0";
+  return (
+    <div style={{
+      padding:"12px 14px",
+      background:"#ffffff",
+      border:`1px solid ${borderColor}`,
+      borderRadius:"8px",
+      borderLeftWidth: highlight && highlight !== "neutral" ? "3px" : "1px"
+    }}>
+      <div style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", marginBottom:"4px", fontWeight:600 }}>{label}</div>
+      <div style={{ fontSize:"18px", fontWeight:700, color:"#1a1a1a", fontFamily:"'Space Mono', monospace" }}>{value}</div>
+      {delta && (
+        <div style={{ fontSize:"10px", color:deltaColor, marginTop:"3px", fontWeight:600 }}>{delta.label}</div>
+      )}
+    </div>
+  );
+}
+
 // Helper: format ago time for "Aggiornato 2h fa"
 function formatAgo(iso?: string): string {
   if (!iso) return "mai";
@@ -174,6 +232,63 @@ function formatAgo(iso?: string): string {
     const d = Math.floor(h / 24);
     return `${d}g fa`;
   } catch { return "mai"; }
+}
+
+// ── ADV HELPERS ──
+function emptyAdvForm() {
+  const now = new Date();
+  const lastMonday = new Date(now);
+  lastMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7) - 7);
+  const lastSunday = new Date(lastMonday);
+  lastSunday.setDate(lastMonday.getDate() + 6);
+  return {
+    week_number: "",
+    week_label: "",
+    week_start: lastMonday.toISOString().slice(0, 10),
+    week_end: lastSunday.toISOString().slice(0, 10),
+    notes: "",
+    acq_spesa: "", acq_impression: "", acq_click: "", acq_acquisti: "", acq_revenue: "",
+    ret_spesa: "", ret_impression: "", ret_click: "", ret_acquisti: "", ret_revenue: "",
+    tra_spesa: "", tra_impression: "", tra_click: ""
+  };
+}
+
+function deriveAdvKPIs(w: any) {
+  if (!w) return null;
+  const n = (v: any) => Number(v) || 0;
+  const acq_spesa = n(w.acq_spesa), acq_acquisti = n(w.acq_acquisti), acq_revenue = n(w.acq_revenue);
+  const acq_impression = n(w.acq_impression), acq_click = n(w.acq_click);
+  const ret_spesa = n(w.ret_spesa), ret_acquisti = n(w.ret_acquisti), ret_revenue = n(w.ret_revenue);
+  const ret_impression = n(w.ret_impression), ret_click = n(w.ret_click);
+  const tra_spesa = n(w.tra_spesa), tra_impression = n(w.tra_impression), tra_click = n(w.tra_click);
+  return {
+    acq_cpa: acq_acquisti > 0 ? acq_spesa / acq_acquisti : 0,
+    acq_roas: acq_spesa > 0 ? acq_revenue / acq_spesa : 0,
+    acq_ctr: acq_impression > 0 ? (acq_click / acq_impression) * 100 : 0,
+    acq_cpc: acq_click > 0 ? acq_spesa / acq_click : 0,
+    ret_cpa: ret_acquisti > 0 ? ret_spesa / ret_acquisti : 0,
+    ret_roas: ret_spesa > 0 ? ret_revenue / ret_spesa : 0,
+    ret_ctr: ret_impression > 0 ? (ret_click / ret_impression) * 100 : 0,
+    ret_cpc: ret_click > 0 ? ret_spesa / ret_click : 0,
+    tra_ctr: tra_impression > 0 ? (tra_click / tra_impression) * 100 : 0,
+    tra_cpc: tra_click > 0 ? tra_spesa / tra_click : 0,
+    total_spesa: acq_spesa + ret_spesa + tra_spesa,
+    total_revenue: acq_revenue + ret_revenue,
+    total_acquisti: acq_acquisti + ret_acquisti,
+    total_roas: (acq_spesa + ret_spesa + tra_spesa) > 0 ? (acq_revenue + ret_revenue) / (acq_spesa + ret_spesa + tra_spesa) : 0
+  };
+}
+
+function deltaPct(curr: number, prev: number): { val: number; label: string; color: string } | null {
+  if (!prev || prev === 0) return null;
+  const d = ((curr - prev) / prev) * 100;
+  const color = d > 0 ? "#1a9d94" : d < 0 ? "#d64545" : "#7a7a7a";
+  const arrow = d > 0 ? "↑" : d < 0 ? "↓" : "→";
+  return { val: d, label: `${arrow} ${d > 0 ? "+" : ""}${d.toFixed(1)}%`, color };
+}
+
+function fmtEuro(n: number): string {
+  return n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -199,6 +314,20 @@ export default function App() {
   const [klaviyoLoading, setKlaviyoLoading] = useState(false);
   const [klaviyoError, setKlaviyoError] = useState<string | null>(null);
   const [klaviyoFetchedAt, setKlaviyoFetchedAt] = useState<string | null>(null);
+
+  // ── ADV (Meta Ads weekly reports) ──
+  const [advWeeks, setAdvWeeks] = useState<any[] | null>(null); // null = not loaded
+  const [advLoading, setAdvLoading] = useState(false);
+  const [advError, setAdvError] = useState<string | null>(null);
+  const [advSelectedId, setAdvSelectedId] = useState<string | null>(null);
+  const [advSubTab, setAdvSubTab] = useState<"week" | "compare" | "trend" | "diagnosi">("week");
+  const [advShowForm, setAdvShowForm] = useState(false);
+  const [advEditingId, setAdvEditingId] = useState<string | null>(null);
+  const [advDiagnosing, setAdvDiagnosing] = useState(false);
+  const [advDiagnoseFocus, setAdvDiagnoseFocus] = useState("");
+  const [advCompareIds, setAdvCompareIds] = useState<string[]>([]);
+  const [advForm, setAdvForm] = useState<any>(emptyAdvForm());
+  const [advSaving, setAdvSaving] = useState(false);
 
   const htmlRef = useRef(null);
 
@@ -274,6 +403,133 @@ export default function App() {
     } finally {
       setKlaviyoLoading(false);
     }
+  }, []);
+
+  // ── ADV: load weeks on tab open ──
+  const fetchAdvWeeks = useCallback(async () => {
+    setAdvLoading(true);
+    setAdvError(null);
+    try {
+      const res = await fetch("/api/adv", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setAdvWeeks(data.weeks || []);
+      // Auto-select latest week if nothing selected
+      if (!advSelectedId && data.weeks && data.weeks.length > 0) {
+        setAdvSelectedId(data.weeks[0].id);
+      }
+    } catch (err: any) {
+      console.error("[adv] fetch failed:", err);
+      setAdvError(err.message || "Errore caricamento settimane ADV");
+    } finally {
+      setAdvLoading(false);
+    }
+  }, [advSelectedId]);
+
+  useEffect(() => {
+    if (tab === "adv" && advWeeks === null && !advLoading) {
+      fetchAdvWeeks();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // ── ADV: save (create or update) ──
+  const saveAdvWeek = useCallback(async () => {
+    if (!advForm.week_number || !advForm.week_start || !advForm.week_end) {
+      alert("Compila almeno: numero settimana, data inizio, data fine");
+      return;
+    }
+    setAdvSaving(true);
+    try {
+      const body = {
+        ...advForm,
+        week_number: Number(advForm.week_number)
+      };
+      const url = advEditingId ? `/api/adv?id=${advEditingId}` : "/api/adv";
+      const method = advEditingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      // Refresh list
+      await fetchAdvWeeks();
+      setAdvShowForm(false);
+      setAdvEditingId(null);
+      setAdvForm(emptyAdvForm());
+      setAdvSelectedId(data.week?.id || null);
+
+      // Auto-trigger AI diagnosis on insert (only for new weeks, not edits)
+      if (!advEditingId && data.week?.id) {
+        diagnoseAdvWeek(data.week.id, "");
+      }
+    } catch (err: any) {
+      alert("Errore salvataggio: " + (err.message || "sconosciuto"));
+    } finally {
+      setAdvSaving(false);
+    }
+  }, [advForm, advEditingId, fetchAdvWeeks]);
+
+  // ── ADV: delete week ──
+  const deleteAdvWeek = useCallback(async (id: string) => {
+    if (!confirm("Eliminare questa settimana ADV? L'azione è irreversibile.")) return;
+    try {
+      const res = await fetch(`/api/adv?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (advSelectedId === id) setAdvSelectedId(null);
+      await fetchAdvWeeks();
+    } catch (err: any) {
+      alert("Errore eliminazione: " + (err.message || "sconosciuto"));
+    }
+  }, [advSelectedId, fetchAdvWeeks]);
+
+  // ── ADV: AI diagnosis ──
+  const diagnoseAdvWeek = useCallback(async (weekId: string, focus: string) => {
+    setAdvDiagnosing(true);
+    try {
+      const res = await fetch("/api/adv/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekId, focus: focus || undefined, saveToDb: true })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      await fetchAdvWeeks(); // reload to get the new ai_diagnosis on the week
+    } catch (err: any) {
+      alert("Errore diagnosi AI: " + (err.message || "sconosciuto"));
+    } finally {
+      setAdvDiagnosing(false);
+    }
+  }, [fetchAdvWeeks]);
+
+  // ── ADV: enter edit mode ──
+  const startAdvEdit = useCallback((week: any) => {
+    setAdvEditingId(week.id);
+    setAdvForm({
+      week_number: String(week.week_number),
+      week_label: week.week_label || "",
+      week_start: week.week_start,
+      week_end: week.week_end,
+      notes: week.notes || "",
+      acq_spesa: String(week.acq_spesa || ""),
+      acq_impression: String(week.acq_impression || ""),
+      acq_click: String(week.acq_click || ""),
+      acq_acquisti: String(week.acq_acquisti || ""),
+      acq_revenue: String(week.acq_revenue || ""),
+      ret_spesa: String(week.ret_spesa || ""),
+      ret_impression: String(week.ret_impression || ""),
+      ret_click: String(week.ret_click || ""),
+      ret_acquisti: String(week.ret_acquisti || ""),
+      ret_revenue: String(week.ret_revenue || ""),
+      tra_spesa: String(week.tra_spesa || ""),
+      tra_impression: String(week.tra_impression || ""),
+      tra_click: String(week.tra_click || "")
+    });
+    setAdvShowForm(true);
   }, []);
 
   // Use live products if available, fallback to hardcoded
@@ -489,6 +745,7 @@ export default function App() {
     secTitle: { fontSize:"10px", color:"#9a9089", textTransform:"uppercase", letterSpacing:"2px", marginBottom:"12px", fontWeight:600 },
     btn: (active,color="#b8924a") => ({ padding:"7px 14px", borderRadius:"7px", fontSize:"11px", fontWeight:600, background:active?color+"1a":"#f5f1ea", color:active?color:"#9a9089", border:`1px solid ${active?color+"44":"#e8ddd0"}`, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s" }),
     goldBtn: { padding:"12px 24px", background:"linear-gradient(135deg,#b8924a,#8a6630)", color:"#ffffff", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:800, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.5px", display:"flex", alignItems:"center", gap:"8px" },
+    input: { width:"100%", padding:"8px 10px", fontSize:"12px", border:"1px solid #e8ddd0", borderRadius:"6px", background:"#ffffff", color:"#1a1a1a", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as const },
   };
 
   return (
@@ -532,6 +789,7 @@ export default function App() {
           <button style={S.tab(tab==="dashboard")} onClick={()=>setTab("dashboard")}>{I.dash} Dashboard</button>
           <button style={S.tab(tab==="generator")} onClick={()=>{setTab("generator");setStep(0);setResult(null);setHtmlStep(0);setHtmlOutput("");setSelectedSubject(null);}}>{I.spark} Generatore</button>
           <button style={S.tab(tab==="campaigns")} onClick={()=>setTab("campaigns")}>{I.list} Campagne</button>
+          <button style={S.tab(tab==="adv")} onClick={()=>setTab("adv")}>📊 ADV</button>
         </div>
       </div>
 
@@ -941,6 +1199,499 @@ export default function App() {
             <span>Rev: <b style={{color:"#b8924a"}}>€{Math.round(filtered.reduce((s,c)=>s+(c.rev||0),0))}</b></span>
             <span>Ordini: <b style={{color:"#1a1a1a"}}>{filtered.reduce((s,c)=>s+(c.orders||0),0)}</b></span>
           </div>
+        </div>)}
+
+        {/* ═══ ADV (META ADS WEEKLY REPORTS) ═══ */}
+        {tab==="adv" && (<div>
+          {advLoading && (advWeeks === null) && (
+            <div style={{ padding:"40px", textAlign:"center", color:"#9a9089" }}>
+              <div style={{ display:"inline-block", width:"24px", height:"24px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+              <div style={{ marginTop:"12px", fontSize:"12px" }}>Caricamento settimane ADV...</div>
+            </div>
+          )}
+
+          {advError && (
+            <div style={{ padding:"14px 18px", background:"#fdf2f2", border:"1px solid #d6454520", borderRadius:"7px", marginBottom:"14px", fontSize:"12px", color:"#d64545" }}>
+              ⚠️ {advError}
+              <button onClick={fetchAdvWeeks} style={{ ...S.btn(false), marginLeft:"10px", fontSize:"11px" }}>Riprova</button>
+            </div>
+          )}
+
+          {/* HEADER */}
+          {advWeeks !== null && (
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px", flexWrap:"wrap", gap:"10px" }}>
+              <div>
+                <div style={{ fontSize:"18px", fontWeight:700, color:"#1a1a1a" }}>Performance ADV settimanale</div>
+                <div style={{ fontSize:"11px", color:"#9a9089", marginTop:"2px" }}>
+                  {advWeeks.length} settiman{advWeeks.length === 1 ? "a" : "e"} salvat{advWeeks.length === 1 ? "a" : "e"}
+                  {advLoading && " · aggiornamento..."}
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={fetchAdvWeeks} disabled={advLoading} style={{ ...S.btn(false), fontSize:"12px" }}>↻ Aggiorna</button>
+                <button
+                  onClick={() => { setAdvForm(emptyAdvForm()); setAdvEditingId(null); setAdvShowForm(true); }}
+                  style={{ ...S.btn(true), fontSize:"12px" }}
+                >+ Nuova settimana</button>
+              </div>
+            </div>
+          )}
+
+          {/* FORM (add/edit) */}
+          {advShowForm && (
+            <div style={{ marginBottom:"20px", padding:"20px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"14px" }}>
+                <div style={{ fontSize:"14px", fontWeight:700, color:"#1a1a1a" }}>
+                  {advEditingId ? "Modifica settimana" : "Nuova settimana ADV"}
+                </div>
+                <button onClick={() => { setAdvShowForm(false); setAdvEditingId(null); setAdvForm(emptyAdvForm()); }} style={{ ...S.btn(false), fontSize:"11px" }}>✕ Annulla</button>
+              </div>
+
+              {/* Metadati */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px", marginBottom:"14px" }}>
+                <div>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Numero settimana *</label>
+                  <input type="number" value={advForm.week_number} onChange={e=>setAdvForm({...advForm, week_number:e.target.value})} placeholder="es. 6" style={S.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Etichetta (opz.)</label>
+                  <input type="text" value={advForm.week_label} onChange={e=>setAdvForm({...advForm, week_label:e.target.value})} placeholder="es. Saldi giugno" style={S.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data inizio *</label>
+                  <input type="date" value={advForm.week_start} onChange={e=>setAdvForm({...advForm, week_start:e.target.value})} style={S.input} />
+                </div>
+                <div>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data fine *</label>
+                  <input type="date" value={advForm.week_end} onChange={e=>setAdvForm({...advForm, week_end:e.target.value})} style={S.input} />
+                </div>
+              </div>
+
+              {/* Acquisizione */}
+              <div style={{ marginBottom:"14px" }}>
+                <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"8px", letterSpacing:"1px" }}>🎯 ACQUISIZIONE</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:"8px" }}>
+                  <NumField label="Spesa €" value={advForm.acq_spesa} onChange={v=>setAdvForm({...advForm, acq_spesa:v})} />
+                  <NumField label="Impression" value={advForm.acq_impression} onChange={v=>setAdvForm({...advForm, acq_impression:v})} />
+                  <NumField label="Click" value={advForm.acq_click} onChange={v=>setAdvForm({...advForm, acq_click:v})} />
+                  <NumField label="Acquisti" value={advForm.acq_acquisti} onChange={v=>setAdvForm({...advForm, acq_acquisti:v})} />
+                  <NumField label="Revenue €" value={advForm.acq_revenue} onChange={v=>setAdvForm({...advForm, acq_revenue:v})} />
+                </div>
+              </div>
+
+              {/* Retargeting */}
+              <div style={{ marginBottom:"14px" }}>
+                <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"8px", letterSpacing:"1px" }}>🔄 RETARGETING</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:"8px" }}>
+                  <NumField label="Spesa €" value={advForm.ret_spesa} onChange={v=>setAdvForm({...advForm, ret_spesa:v})} />
+                  <NumField label="Impression" value={advForm.ret_impression} onChange={v=>setAdvForm({...advForm, ret_impression:v})} />
+                  <NumField label="Click" value={advForm.ret_click} onChange={v=>setAdvForm({...advForm, ret_click:v})} />
+                  <NumField label="Acquisti" value={advForm.ret_acquisti} onChange={v=>setAdvForm({...advForm, ret_acquisti:v})} />
+                  <NumField label="Revenue €" value={advForm.ret_revenue} onChange={v=>setAdvForm({...advForm, ret_revenue:v})} />
+                </div>
+              </div>
+
+              {/* Traffico */}
+              <div style={{ marginBottom:"14px" }}>
+                <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"8px", letterSpacing:"1px" }}>🚀 TRAFFICO</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"8px" }}>
+                  <NumField label="Spesa €" value={advForm.tra_spesa} onChange={v=>setAdvForm({...advForm, tra_spesa:v})} />
+                  <NumField label="Impression" value={advForm.tra_impression} onChange={v=>setAdvForm({...advForm, tra_impression:v})} />
+                  <NumField label="Click" value={advForm.tra_click} onChange={v=>setAdvForm({...advForm, tra_click:v})} />
+                </div>
+              </div>
+
+              {/* Note */}
+              <div style={{ marginBottom:"14px" }}>
+                <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Note (opz.)</label>
+                <textarea value={advForm.notes} onChange={e=>setAdvForm({...advForm, notes:e.target.value})} placeholder="es. Nuova creatività lanciata mercoledì, weekend di sconti..." style={{ ...S.input, width:"100%", minHeight:"56px", resize:"vertical" }} />
+              </div>
+
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={saveAdvWeek} disabled={advSaving} style={{ ...S.btn(true), opacity: advSaving ? 0.6 : 1 }}>
+                  {advSaving ? "Salvando..." : (advEditingId ? "✓ Salva modifiche" : "✓ Salva e genera diagnosi AI")}
+                </button>
+                {!advEditingId && (
+                  <div style={{ fontSize:"10px", color:"#9a9089", alignSelf:"center" }}>
+                    Claude analizzerà automaticamente i dati al salvataggio
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CONTENT: lista vuota OR weeks list + detail */}
+          {advWeeks !== null && advWeeks.length === 0 && !advShowForm && (
+            <div style={{ padding:"60px 24px", textAlign:"center", background:"#faf7f2", borderRadius:"10px", color:"#9a9089" }}>
+              <div style={{ fontSize:"42px", marginBottom:"10px" }}>📊</div>
+              <div style={{ fontSize:"15px", color:"#1a1a1a", fontWeight:600, marginBottom:"6px" }}>Nessuna settimana ADV salvata</div>
+              <div style={{ fontSize:"12px", marginBottom:"16px" }}>Inizia caricando il primo report settimanale dei ragazzi che gestiscono le ads.</div>
+              <button onClick={() => { setAdvForm(emptyAdvForm()); setAdvEditingId(null); setAdvShowForm(true); }} style={{ ...S.btn(true) }}>+ Carica prima settimana</button>
+            </div>
+          )}
+
+          {advWeeks !== null && advWeeks.length > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"260px 1fr", gap:"16px" }}>
+              {/* SIDEBAR weeks list */}
+              <div style={{ background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px", overflow:"hidden" }}>
+                <div style={{ padding:"12px 14px", borderBottom:"1px solid #e8ddd0", fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", fontWeight:700 }}>
+                  Settimane ({advWeeks.length})
+                </div>
+                <div style={{ maxHeight:"640px", overflowY:"auto" }}>
+                  {advWeeks.map((w: any) => {
+                    const k = deriveAdvKPIs(w);
+                    const isSelected = w.id === advSelectedId;
+                    return (
+                      <div
+                        key={w.id}
+                        onClick={() => setAdvSelectedId(w.id)}
+                        style={{
+                          padding:"12px 14px",
+                          cursor:"pointer",
+                          borderBottom:"1px solid #f5f0ea",
+                          background: isSelected ? "#faf7f2" : "transparent",
+                          borderLeft: isSelected ? "3px solid #b8924a" : "3px solid transparent",
+                          transition:"all 0.1s"
+                        }}
+                        onMouseEnter={e => { if(!isSelected) e.currentTarget.style.background="#fafafa"; }}
+                        onMouseLeave={e => { if(!isSelected) e.currentTarget.style.background="transparent"; }}
+                      >
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"4px" }}>
+                          <div style={{ fontSize:"13px", fontWeight:700, color:"#1a1a1a" }}>W{w.week_number}</div>
+                          <div style={{ fontSize:"9px", color:"#9a9089", fontFamily:"'Space Mono', monospace" }}>{w.week_start?.slice(5)} → {w.week_end?.slice(5)}</div>
+                        </div>
+                        {w.week_label && <div style={{ fontSize:"10px", color:"#7a7a7a", marginBottom:"6px", fontStyle:"italic" }}>{w.week_label}</div>}
+                        <div style={{ display:"flex", gap:"8px", fontSize:"10px", color:"#5a5a5a" }}>
+                          <span>Sp: <b style={{color:"#1a1a1a"}}>{fmtEuro(k?.total_spesa || 0)}</b></span>
+                          <span>ROAS: <b style={{color: (k?.total_roas || 0) >= 3 ? "#1a9d94" : (k?.total_roas || 0) >= 2 ? "#b8924a" : "#d64545"}}>{(k?.total_roas || 0).toFixed(2)}x</b></span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* MAIN PANEL: detail of selected week */}
+              <div>
+                {(() => {
+                  const w = advWeeks.find((x: any) => x.id === advSelectedId);
+                  if (!w) return <div style={{ padding:"40px", textAlign:"center", color:"#9a9089", fontSize:"13px" }}>Seleziona una settimana</div>;
+                  const idx = advWeeks.findIndex((x: any) => x.id === w.id);
+                  // remember advWeeks is sorted DESC by week_number, so prev is at idx+1
+                  const prev = idx + 1 < advWeeks.length ? advWeeks[idx + 1] : null;
+                  const k = deriveAdvKPIs(w);
+                  const kPrev = prev ? deriveAdvKPIs(prev) : null;
+
+                  return (
+                    <div>
+                      {/* Sub-tabs */}
+                      <div style={{ display:"flex", gap:"4px", marginBottom:"14px", borderBottom:"1px solid #e8ddd0" }}>
+                        {[
+                          {id:"week", label:"📅 Settimana", show:true},
+                          {id:"compare", label:"⚖️ Confronto", show:advWeeks.length > 1},
+                          {id:"trend", label:"📈 Trend", show:advWeeks.length >= 2},
+                          {id:"diagnosi", label:"🔍 Diagnosi AI", show:true},
+                        ].filter(s => s.show).map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setAdvSubTab(s.id as any)}
+                            style={{
+                              padding:"8px 14px",
+                              background:"transparent",
+                              border:"none",
+                              borderBottom: advSubTab === s.id ? "2px solid #b8924a" : "2px solid transparent",
+                              color: advSubTab === s.id ? "#1a1a1a" : "#7a7a7a",
+                              fontWeight: advSubTab === s.id ? 600 : 400,
+                              cursor:"pointer",
+                              fontSize:"12px",
+                              transition:"all 0.1s"
+                            }}
+                          >{s.label}</button>
+                        ))}
+                      </div>
+
+                      {/* WEEK DETAIL */}
+                      {advSubTab === "week" && (
+                        <div>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"16px" }}>
+                            <div>
+                              <div style={{ fontSize:"22px", fontWeight:700, color:"#1a1a1a" }}>
+                                Settimana {w.week_number}{w.week_label && <span style={{ fontWeight:400, color:"#7a7a7a", marginLeft:"10px", fontSize:"14px" }}>· {w.week_label}</span>}
+                              </div>
+                              <div style={{ fontSize:"11px", color:"#9a9089", marginTop:"4px", fontFamily:"'Space Mono', monospace" }}>
+                                {w.week_start} → {w.week_end}{prev && ` · confronto con W${prev.week_number}`}
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", gap:"6px" }}>
+                              <button onClick={() => startAdvEdit(w)} style={{ ...S.btn(false), fontSize:"11px" }}>✎ Modifica</button>
+                              <button onClick={() => deleteAdvWeek(w.id)} style={{ ...S.btn(false), fontSize:"11px", color:"#d64545" }}>🗑 Elimina</button>
+                            </div>
+                          </div>
+
+                          {w.notes && (
+                            <div style={{ padding:"10px 14px", background:"#faf7f2", borderLeft:"3px solid #b8924a", borderRadius:"4px", marginBottom:"16px", fontSize:"12px", color:"#3a3a3a", fontStyle:"italic" }}>
+                              {w.notes}
+                            </div>
+                          )}
+
+                          {/* TOTAL OVERVIEW */}
+                          <div style={{ marginBottom:"18px" }}>
+                            <div style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", marginBottom:"8px", fontWeight:700 }}>📈 Totali</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px" }}>
+                              <AdvKpiCard label="Spesa totale" value={fmtEuro(k?.total_spesa || 0)} delta={kPrev ? deltaPct(k?.total_spesa || 0, kPrev.total_spesa) : null} invertDelta />
+                              <AdvKpiCard label="Revenue tot." value={fmtEuro(k?.total_revenue || 0)} delta={kPrev ? deltaPct(k?.total_revenue || 0, kPrev.total_revenue) : null} />
+                              <AdvKpiCard label="Acquisti" value={String(k?.total_acquisti || 0)} delta={kPrev ? deltaPct(k?.total_acquisti || 0, kPrev.total_acquisti) : null} />
+                              <AdvKpiCard label="ROAS totale" value={`${(k?.total_roas || 0).toFixed(2)}x`} delta={kPrev ? deltaPct(k?.total_roas || 0, kPrev.total_roas) : null} highlight={(k?.total_roas || 0) >= 3 ? "good" : (k?.total_roas || 0) < 2 ? "bad" : "warn"} />
+                            </div>
+                          </div>
+
+                          {/* ACQUISIZIONE */}
+                          <div style={{ marginBottom:"18px", padding:"14px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"8px" }}>
+                            <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"10px", letterSpacing:"1px" }}>🎯 ACQUISIZIONE</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px" }}>
+                              <AdvKpiCard label="Spesa" value={fmtEuro(w.acq_spesa || 0)} delta={prev ? deltaPct(w.acq_spesa || 0, prev.acq_spesa || 0) : null} invertDelta />
+                              <AdvKpiCard label="Acquisti" value={String(w.acq_acquisti || 0)} delta={prev ? deltaPct(w.acq_acquisti || 0, prev.acq_acquisti || 0) : null} />
+                              <AdvKpiCard label="CPA" value={fmtEuro(k?.acq_cpa || 0)} delta={kPrev ? deltaPct(k?.acq_cpa || 0, kPrev.acq_cpa) : null} invertDelta highlight={(k?.acq_cpa || 0) > 0 && (k?.acq_cpa || 0) < 20 ? "good" : (k?.acq_cpa || 0) > 25 ? "bad" : "neutral"} />
+                              <AdvKpiCard label="ROAS" value={`${(k?.acq_roas || 0).toFixed(2)}x`} delta={kPrev ? deltaPct(k?.acq_roas || 0, kPrev.acq_roas) : null} highlight={(k?.acq_roas || 0) >= 3 ? "good" : (k?.acq_roas || 0) < 2 ? "bad" : "warn"} />
+                            </div>
+                            {(w.acq_impression > 0 || w.acq_click > 0) && (
+                              <div style={{ display:"flex", gap:"24px", marginTop:"10px", paddingTop:"10px", borderTop:"1px dashed #e8ddd0", fontSize:"11px", color:"#5a5a5a" }}>
+                                <span>Impression: <b style={{color:"#1a1a1a"}}>{(w.acq_impression||0).toLocaleString("it-IT")}</b></span>
+                                <span>Click: <b style={{color:"#1a1a1a"}}>{(w.acq_click||0).toLocaleString("it-IT")}</b></span>
+                                <span>CTR: <b style={{color:"#1a1a1a"}}>{(k?.acq_ctr || 0).toFixed(2)}%</b></span>
+                                <span>CPC: <b style={{color:"#1a1a1a"}}>{fmtEuro(k?.acq_cpc || 0)}</b></span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* RETARGETING */}
+                          <div style={{ marginBottom:"18px", padding:"14px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"8px" }}>
+                            <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"10px", letterSpacing:"1px" }}>🔄 RETARGETING</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px" }}>
+                              <AdvKpiCard label="Spesa" value={fmtEuro(w.ret_spesa || 0)} delta={prev ? deltaPct(w.ret_spesa || 0, prev.ret_spesa || 0) : null} invertDelta />
+                              <AdvKpiCard label="Acquisti" value={String(w.ret_acquisti || 0)} delta={prev ? deltaPct(w.ret_acquisti || 0, prev.ret_acquisti || 0) : null} />
+                              <AdvKpiCard label="CPA" value={fmtEuro(k?.ret_cpa || 0)} delta={kPrev ? deltaPct(k?.ret_cpa || 0, kPrev.ret_cpa) : null} invertDelta highlight={(k?.ret_cpa || 0) > 0 && (k?.ret_cpa || 0) < 15 ? "good" : (k?.ret_cpa || 0) > 20 ? "bad" : "neutral"} />
+                              <AdvKpiCard label="ROAS" value={`${(k?.ret_roas || 0).toFixed(2)}x`} delta={kPrev ? deltaPct(k?.ret_roas || 0, kPrev.ret_roas) : null} highlight={(k?.ret_roas || 0) >= 4 ? "good" : (k?.ret_roas || 0) < 3 ? "bad" : "warn"} />
+                            </div>
+                          </div>
+
+                          {/* TRAFFICO */}
+                          {(w.tra_spesa > 0 || w.tra_impression > 0) && (
+                            <div style={{ padding:"14px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"8px" }}>
+                              <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"10px", letterSpacing:"1px" }}>🚀 TRAFFICO</div>
+                              <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px" }}>
+                                <AdvKpiCard label="Spesa" value={fmtEuro(w.tra_spesa || 0)} delta={prev ? deltaPct(w.tra_spesa || 0, prev.tra_spesa || 0) : null} invertDelta />
+                                <AdvKpiCard label="Click" value={(w.tra_click || 0).toLocaleString("it-IT")} delta={prev ? deltaPct(w.tra_click || 0, prev.tra_click || 0) : null} />
+                                <AdvKpiCard label="CTR" value={`${(k?.tra_ctr || 0).toFixed(2)}%`} delta={kPrev ? deltaPct(k?.tra_ctr || 0, kPrev.tra_ctr) : null} />
+                                <AdvKpiCard label="CPC" value={fmtEuro(k?.tra_cpc || 0)} delta={kPrev ? deltaPct(k?.tra_cpc || 0, kPrev.tra_cpc) : null} invertDelta />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* COMPARE */}
+                      {advSubTab === "compare" && (
+                        <div>
+                          <div style={{ fontSize:"15px", fontWeight:700, color:"#1a1a1a", marginBottom:"6px" }}>Confronto libero tra settimane</div>
+                          <div style={{ fontSize:"11px", color:"#9a9089", marginBottom:"14px" }}>Seleziona 2-4 settimane da confrontare</div>
+                          <div style={{ display:"flex", gap:"6px", marginBottom:"16px", flexWrap:"wrap" }}>
+                            {advWeeks.map((wk: any) => {
+                              const selected = advCompareIds.includes(wk.id);
+                              return (
+                                <button
+                                  key={wk.id}
+                                  onClick={() => {
+                                    if (selected) setAdvCompareIds(advCompareIds.filter(x => x !== wk.id));
+                                    else if (advCompareIds.length < 4) setAdvCompareIds([...advCompareIds, wk.id]);
+                                  }}
+                                  style={{
+                                    padding:"6px 12px", borderRadius:"6px", fontSize:"11px",
+                                    border:`1px solid ${selected ? "#b8924a" : "#e8ddd0"}`,
+                                    background: selected ? "#b8924a" : "#ffffff",
+                                    color: selected ? "#ffffff" : "#3a3a3a",
+                                    cursor: (!selected && advCompareIds.length >= 4) ? "not-allowed" : "pointer",
+                                    opacity: (!selected && advCompareIds.length >= 4) ? 0.5 : 1,
+                                    fontWeight: selected ? 600 : 400
+                                  }}
+                                >W{wk.week_number}{wk.week_label && ` · ${wk.week_label.slice(0,18)}`}</button>
+                              );
+                            })}
+                          </div>
+
+                          {advCompareIds.length < 2 ? (
+                            <div style={{ padding:"30px", textAlign:"center", color:"#9a9089", fontSize:"12px", background:"#faf7f2", borderRadius:"8px" }}>
+                              Seleziona almeno 2 settimane per vedere il confronto
+                            </div>
+                          ) : (
+                            <div style={{ overflow:"auto", border:"1px solid #e8ddd0", borderRadius:"8px", background:"#ffffff" }}>
+                              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                                <thead>
+                                  <tr style={{ background:"#faf7f2", borderBottom:"1px solid #e8ddd0" }}>
+                                    <th style={{ padding:"10px 14px", textAlign:"left", fontSize:"10px", textTransform:"uppercase", letterSpacing:"1px", color:"#7a7a7a", fontWeight:700 }}>Metrica</th>
+                                    {advCompareIds.map(id => {
+                                      const wk = advWeeks.find((x: any) => x.id === id);
+                                      return <th key={id} style={{ padding:"10px 14px", textAlign:"right", fontSize:"10px", textTransform:"uppercase", letterSpacing:"1px", color:"#7a7a7a", fontWeight:700 }}>W{wk?.week_number}</th>;
+                                    })}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    { label:"Spesa totale", key:"total_spesa", fmt:(v:number)=>fmtEuro(v), highBetter:false },
+                                    { label:"Revenue totale", key:"total_revenue", fmt:(v:number)=>fmtEuro(v), highBetter:true },
+                                    { label:"Acquisti tot.", key:"total_acquisti", fmt:(v:number)=>String(v), highBetter:true },
+                                    { label:"ROAS totale", key:"total_roas", fmt:(v:number)=>`${v.toFixed(2)}x`, highBetter:true },
+                                    { label:"—", key:"sep1" },
+                                    { label:"Spesa acquisizione", key:"acq_spesa", fmt:(v:number)=>fmtEuro(v), raw:true, highBetter:false },
+                                    { label:"CPA acquisizione", key:"acq_cpa", fmt:(v:number)=>fmtEuro(v), highBetter:false },
+                                    { label:"ROAS acquisizione", key:"acq_roas", fmt:(v:number)=>`${v.toFixed(2)}x`, highBetter:true },
+                                    { label:"—", key:"sep2" },
+                                    { label:"Spesa retargeting", key:"ret_spesa", fmt:(v:number)=>fmtEuro(v), raw:true, highBetter:false },
+                                    { label:"CPA retargeting", key:"ret_cpa", fmt:(v:number)=>fmtEuro(v), highBetter:false },
+                                    { label:"ROAS retargeting", key:"ret_roas", fmt:(v:number)=>`${v.toFixed(2)}x`, highBetter:true },
+                                  ].map((row, ri) => {
+                                    if (row.key.startsWith("sep")) {
+                                      return <tr key={row.key}><td colSpan={advCompareIds.length+1} style={{ borderTop:"1px dashed #e8ddd0", height:"4px" }}></td></tr>;
+                                    }
+                                    const values = advCompareIds.map(id => {
+                                      const wk = advWeeks.find((x: any) => x.id === id);
+                                      if (!wk) return 0;
+                                      if (row.raw) return Number(wk[row.key]) || 0;
+                                      const kk = deriveAdvKPIs(wk);
+                                      return (kk as any)?.[row.key] || 0;
+                                    });
+                                    const maxV = Math.max(...values), minV = Math.min(...values);
+                                    return (
+                                      <tr key={row.key} style={{ borderBottom:"1px solid #f5f0ea" }}>
+                                        <td style={{ padding:"9px 14px", color:"#3a3a3a", fontWeight:500 }}>{row.label}</td>
+                                        {values.map((v, i) => {
+                                          const isBest = row.highBetter !== undefined && values.length > 1 && (row.highBetter ? v === maxV : v === minV) && maxV !== minV;
+                                          return (
+                                            <td key={i} style={{ padding:"9px 14px", textAlign:"right", color: isBest ? "#1a9d94" : "#1a1a1a", fontWeight: isBest ? 700 : 400, fontFamily:"'Space Mono', monospace" }}>
+                                              {row.fmt!(v)}
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TREND */}
+                      {advSubTab === "trend" && (
+                        <div>
+                          <div style={{ fontSize:"15px", fontWeight:700, color:"#1a1a1a", marginBottom:"14px" }}>Trend storico</div>
+                          {(() => {
+                            const sorted = [...advWeeks].sort((a: any, b: any) => a.week_number - b.week_number);
+                            const trendMetrics = [
+                              { key:"total_spesa", label:"Spesa totale settimanale", color:"#d64545", fmt:(v:number)=>fmtEuro(v) },
+                              { key:"total_revenue", label:"Revenue totale", color:"#1a9d94", fmt:(v:number)=>fmtEuro(v) },
+                              { key:"total_roas", label:"ROAS totale", color:"#b8924a", fmt:(v:number)=>`${v.toFixed(2)}x` },
+                              { key:"acq_roas", label:"ROAS acquisizione", color:"#7c5cd4", fmt:(v:number)=>`${v.toFixed(2)}x` },
+                              { key:"ret_roas", label:"ROAS retargeting", color:"#10b981", fmt:(v:number)=>`${v.toFixed(2)}x` },
+                            ];
+                            return (
+                              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                                {trendMetrics.map(m => {
+                                  const values = sorted.map((wk: any) => {
+                                    const kk = deriveAdvKPIs(wk);
+                                    return (kk as any)?.[m.key] || 0;
+                                  });
+                                  const maxV = Math.max(...values, 0.01);
+                                  return (
+                                    <div key={m.key} style={{ padding:"14px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"8px" }}>
+                                      <div style={{ fontSize:"11px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", marginBottom:"10px", fontWeight:700 }}>{m.label}</div>
+                                      <div style={{ display:"flex", alignItems:"flex-end", gap:"4px", height:"80px", marginBottom:"6px" }}>
+                                        {values.map((v, i) => (
+                                          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"3px" }}>
+                                            <div style={{
+                                              width:"100%", background:m.color,
+                                              height:`${(v/maxV)*100}%`,
+                                              minHeight:"3px", borderRadius:"3px 3px 0 0",
+                                              opacity: 0.85
+                                            }} title={`W${sorted[i].week_number}: ${m.fmt(v)}`} />
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:"9px", color:"#9a9089", fontFamily:"'Space Mono', monospace" }}>
+                                        {sorted.map((wk: any, i: number) => <span key={i}>W{wk.week_number}</span>)}
+                                      </div>
+                                      <div style={{ marginTop:"6px", fontSize:"11px", color:"#3a3a3a" }}>
+                                        Ultimo: <b>{m.fmt(values[values.length-1])}</b>
+                                        {values.length >= 2 && (
+                                          <span style={{ marginLeft:"10px", color: deltaPct(values[values.length-1], values[values.length-2])?.color }}>
+                                            {deltaPct(values[values.length-1], values[values.length-2])?.label}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* DIAGNOSI AI */}
+                      {advSubTab === "diagnosi" && (
+                        <div>
+                          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"14px", gap:"10px", flexWrap:"wrap" }}>
+                            <div>
+                              <div style={{ fontSize:"15px", fontWeight:700, color:"#1a1a1a" }}>Diagnosi AI — W{w.week_number}</div>
+                              <div style={{ fontSize:"11px", color:"#9a9089", marginTop:"2px" }}>
+                                {w.ai_diagnosis_at ? `Generata ${formatAgo(w.ai_diagnosis_at)}` : "Nessuna diagnosi ancora generata"}
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                              <input
+                                type="text"
+                                value={advDiagnoseFocus}
+                                onChange={e => setAdvDiagnoseFocus(e.target.value)}
+                                placeholder="Focus opzionale (es. perché il CPA è salito?)"
+                                style={{ ...S.input, width:"320px", fontSize:"11px" }}
+                              />
+                              <button
+                                onClick={() => diagnoseAdvWeek(w.id, advDiagnoseFocus)}
+                                disabled={advDiagnosing}
+                                style={{ ...S.btn(true), fontSize:"11px", opacity: advDiagnosing ? 0.6 : 1 }}
+                              >
+                                {advDiagnosing ? "Analizzando..." : (w.ai_diagnosis ? "↻ Rigenera" : "✨ Genera diagnosi")}
+                              </button>
+                            </div>
+                          </div>
+
+                          {advDiagnosing && (
+                            <div style={{ padding:"40px", textAlign:"center", background:"#faf7f2", borderRadius:"8px", color:"#7a7a7a" }}>
+                              <div style={{ display:"inline-block", width:"24px", height:"24px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+                              <div style={{ marginTop:"12px", fontSize:"12px" }}>Claude sta analizzando i dati...</div>
+                            </div>
+                          )}
+
+                          {!advDiagnosing && w.ai_diagnosis && (
+                            <div style={{ padding:"20px 24px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px", fontSize:"13px", lineHeight:1.6, color:"#1a1a1a", whiteSpace:"pre-wrap", fontFamily:"system-ui, -apple-system, sans-serif" }}>
+                              {w.ai_diagnosis}
+                            </div>
+                          )}
+
+                          {!advDiagnosing && !w.ai_diagnosis && (
+                            <div style={{ padding:"40px 24px", textAlign:"center", background:"#faf7f2", borderRadius:"10px", color:"#7a7a7a", fontSize:"13px" }}>
+                              Clicca su "Genera diagnosi" per far analizzare a Claude i dati di questa settimana
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
         </div>)}
       </div>
 
