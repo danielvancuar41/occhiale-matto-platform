@@ -1,9 +1,10 @@
 /**
- * Klaviyo Campaigns Loader v2
+ * Klaviyo Campaigns Loader v3
  *
- * Fixes "0 stats" issue: exposes Reports API errors in the response
- * instead of silently swallowing them. Adds extensive logging on the
- * Reports call so we can see exactly what Klaviyo returns.
+ * Adds rate-limit handling for the Reports API (429 throttling):
+ * - Smaller batches (20 IDs)
+ * - Mandatory 1.2s sleep between batches
+ * - Auto-retry on 429 with exponential backoff
  */
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
@@ -37,9 +38,10 @@ export type CampaignType =
   | "brand"
   | "stagionale";
 
-// Expose last Reports error so the /api/klaviyo route can surface it
 let _lastStatsError: string | null = null;
 export function getLastStatsError() { return _lastStatsError; }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function inferType(subject: string, name: string): CampaignType {
   const s = (subject + " " + name).toLowerCase();
@@ -83,13 +85,12 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
   let path: string | null = `/campaigns/?${filter}&${sort}&${include}`;
   let included: any[] = [];
 
-  console.log("[klaviyo] listCampaigns start, path:", path);
+  console.log("[klaviyo] listCampaigns start");
 
   while (path && all.length < maxItems) {
     const data: any = await klaviyoFetch(path);
     if (Array.isArray(data?.data)) all.push(...data.data);
     if (Array.isArray(data?.included)) included.push(...data.included);
-    console.log(`[klaviyo] page fetched, accumulated=${all.length}, included=${included.length}`);
     const next = data?.links?.next;
     if (!next) break;
     path = next.replace(KLAVIYO_BASE, "");
@@ -115,25 +116,58 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
     ).filter(Boolean);
   }
 
-  console.log("[klaviyo] listCampaigns done, returning", all.length, "campaigns");
+  console.log("[klaviyo] listCampaigns done:", all.length, "campaigns");
   return all.slice(0, maxItems);
 }
 
 /**
- * Call Reports API to get aggregated stats per campaign.
- * Tries multiple timeframes and exposes errors verbosely.
+ * Single Reports API call with retry on 429.
  */
+async function reportsCallWithRetry(
+  body: any,
+  attempt = 1,
+  maxAttempts = 4
+): Promise<{ ok: boolean; status: number; json?: any; errorText?: string; retryAfterMs?: number }> {
+  const apiKey = process.env.KLAVIYO_API_KEY;
+
+  const res = await fetch(`${KLAVIYO_BASE}/campaign-values-reports/`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Klaviyo-API-Key ${apiKey}`,
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "revision": KLAVIYO_REVISION
+    },
+    body: JSON.stringify(body),
+    cache: "no-store"
+  });
+
+  if (res.ok) {
+    return { ok: true, status: res.status, json: await res.json() };
+  }
+
+  const text = await res.text();
+
+  // Handle 429 throttling: retry with backoff
+  if (res.status === 429 && attempt < maxAttempts) {
+    // Parse "Expected available in X second" from the error text
+    let waitSec = 2 * attempt; // default: 2s, 4s, 6s
+    const m = text.match(/Expected available in (\d+(?:\.\d+)?) second/);
+    if (m) waitSec = Math.max(parseFloat(m[1]) + 0.5, waitSec);
+
+    const waitMs = Math.ceil(waitSec * 1000);
+    console.warn(`[klaviyo] 429 throttled (attempt ${attempt}/${maxAttempts}), waiting ${waitMs}ms`);
+    await sleep(waitMs);
+    return reportsCallWithRetry(body, attempt + 1, maxAttempts);
+  }
+
+  return { ok: false, status: res.status, errorText: text };
+}
+
 async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<string, any>> {
   if (!campaignIds.length) return {};
 
   const conversionMetricId = process.env.KLAVIYO_CONVERSION_METRIC_ID;
-  if (!conversionMetricId) {
-    const msg = "KLAVIYO_CONVERSION_METRIC_ID missing — revenue/orders will be 0";
-    console.warn(`[klaviyo] ${msg}`);
-    _lastStatsError = msg;
-  }
-
-  const apiKey = process.env.KLAVIYO_API_KEY;
   const idsList = campaignIds.map(id => `"${id}"`).join(",");
 
   const body: any = {
@@ -151,112 +185,83 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
     }
   };
 
-  // conversion_metric_id is REQUIRED at the top level of attributes for revenue/orders
   if (conversionMetricId) {
     body.data.attributes.conversion_metric_id = conversionMetricId;
   }
 
-  console.log("[klaviyo] Reports body:", JSON.stringify(body).slice(0, 400));
+  const result = await reportsCallWithRetry(body);
 
-  const res = await fetch(`${KLAVIYO_BASE}/campaign-values-reports/`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "revision": KLAVIYO_REVISION
-    },
-    body: JSON.stringify(body),
-    cache: "no-store"
-  });
-
-  console.log("[klaviyo] Reports response status:", res.status);
-
-  if (!res.ok) {
-    const text = await res.text();
-    const err = `Reports ${res.status}: ${text.slice(0, 400)}`;
+  if (!result.ok) {
+    const err = `Reports ${result.status}: ${result.errorText?.slice(0, 300)}`;
     console.error(`[klaviyo] ${err}`);
     _lastStatsError = err;
     return {};
   }
 
-  const json: any = await res.json();
-
-  // Log the full response structure to understand current Klaviyo schema
-  console.log("[klaviyo] Reports response keys:", Object.keys(json || {}));
-  console.log("[klaviyo] Reports data keys:", Object.keys(json?.data || {}));
-  console.log("[klaviyo] Reports data.attributes keys:", Object.keys(json?.data?.attributes || {}));
-
+  const json = result.json;
   const attrs = json?.data?.attributes || {};
-  // Klaviyo may put results in different places depending on revision
   const rows: any[] =
     attrs.results ||
     attrs.data ||
     json?.data?.results ||
     [];
 
-  console.log(`[klaviyo] Reports rows count: ${rows.length}`);
+  console.log(`[klaviyo] Reports batch returned ${rows.length} rows`);
   if (rows.length > 0) {
-    console.log("[klaviyo] Reports first row keys:", Object.keys(rows[0] || {}));
-    console.log("[klaviyo] Reports first row sample:", JSON.stringify(rows[0]).slice(0, 400));
+    console.log("[klaviyo] Sample row keys:", Object.keys(rows[0] || {}));
   }
 
   const map: Record<string, any> = {};
   for (const row of rows) {
-    // Try multiple paths to find the campaign id
     const cid =
       row?.groupings?.campaign_id ||
       row?.campaign_id ||
       row?.id ||
       row?.dimensions?.[0];
     if (cid) {
-      // statistics may be at row.statistics or row.values
       map[cid] = row.statistics || row.values || row || {};
     }
-  }
-
-  console.log(`[klaviyo] Reports mapped ${Object.keys(map).length} campaigns to stats`);
-  if (Object.keys(map).length === 0 && rows.length > 0) {
-    _lastStatsError = `Reports returned ${rows.length} rows but no campaign_id matched. First row: ${JSON.stringify(rows[0]).slice(0, 200)}`;
   }
 
   return map;
 }
 
 export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCampaign[]> {
-  // Reset error state
   _lastStatsError = null;
 
   const campaigns = await listCampaigns(maxItems);
   if (!campaigns.length) return [];
 
-  if (campaigns[0]) {
-    const sample = campaigns[0];
-    console.log("[klaviyo] sample campaign attrs keys:", Object.keys(sample?.attributes || {}));
-    console.log("[klaviyo] sample send_time:", sample?.attributes?.send_time);
-    console.log("[klaviyo] sample scheduled_at:", sample?.attributes?.scheduled_at);
-    console.log("[klaviyo] sample name:", sample?.attributes?.name);
-    if (sample._messages?.[0]) {
-      console.log("[klaviyo] sample message attrs keys:", Object.keys(sample._messages[0]?.attributes || {}));
-    }
-  }
-
   const ids = campaigns.map(c => c.id);
   const statsMap: Record<string, any> = {};
 
-  // Batch in groups of 30 (smaller batches = more reliable)
-  for (let i = 0; i < ids.length; i += 30) {
-    const batch = ids.slice(i, i + 30);
+  // Batch in groups of 20 with 1.2s pause between batches
+  const BATCH_SIZE = 20;
+  const PAUSE_MS = 1200;
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
+
+    console.log(`[klaviyo] stats batch ${batchNum}/${totalBatches} (${batch.length} ids)`);
+
     try {
       const map = await getStatsForCampaigns(batch);
       Object.assign(statsMap, map);
+      console.log(`[klaviyo] batch ${batchNum} ok: mapped ${Object.keys(map).length} stats so far`);
     } catch (err: any) {
-      console.error("[klaviyo] stats batch failed:", err?.message || err);
+      console.error(`[klaviyo] batch ${batchNum} failed:`, err?.message || err);
       _lastStatsError = err?.message || String(err);
+    }
+
+    // Pause before next batch (skip after the last one)
+    if (i + BATCH_SIZE < ids.length) {
+      await sleep(PAUSE_MS);
     }
   }
 
-  console.log(`[klaviyo] total stats mapped: ${Object.keys(statsMap).length} / ${ids.length} campaigns`);
+  console.log(`[klaviyo] total stats mapped: ${Object.keys(statsMap).length} / ${ids.length}`);
 
   return campaigns.map((c): EnrichedCampaign => {
     const attrs = c.attributes || {};
@@ -293,7 +298,6 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
     const rev = Number(stats.conversion_value || 0);
     const unsub = Number(stats.unsubscribes || 0);
 
-    // Klaviyo may already return open_rate/click_rate as decimal 0..1, multiply if so
     const orFromStats = Number(stats.open_rate || 0);
     const crFromStats = Number(stats.click_rate || 0);
 
