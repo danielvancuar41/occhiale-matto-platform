@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt } from "@/lib/anthropic";
-import type { Campaign, Product } from "@/lib/anthropic";
+import type { Campaign, Product, TemplateStyle, ColorMode } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -16,6 +16,8 @@ type GenerateRequest = {
   chosenSubject?: string;
   chosenPreview?: string;
   strategy?: string;
+  templateStyle?: TemplateStyle;
+  colorMode?: ColorMode;
 };
 
 export async function POST(req: NextRequest) {
@@ -99,7 +101,9 @@ async function generateHtml(body: GenerateRequest) {
     chosenPreview: body.chosenPreview,
     emailType: body.emailType,
     selectedProducts: body.selectedProducts,
-    strategy: body.strategy || ""
+    strategy: body.strategy || "",
+    templateStyle: body.templateStyle || "classico",
+    colorMode: body.colorMode || "light"
   });
 
   const resp = await anthropic.messages.create({
