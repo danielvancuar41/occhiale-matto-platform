@@ -16,6 +16,18 @@
 
 export const BRAND_RULES = {
   // ─────────────────────────────────────────────────
+  // VINCOLI INVIOLABILI (PRIORITÀ ASSOLUTA)
+  // Bug HTML ricorrenti che NON devono MAI ripetersi.
+  // Questi vincoli sovrascrivono qualunque altra istruzione successiva.
+  // ─────────────────────────────────────────────────
+  vincoli_inviolabili: [
+    "FOTO PRODOTTO senza rettangoli o sfondi: la <td> che contiene <img> NON deve avere style background:#fff o background-color o border o padding > 8px. Solo <td align=\"center\" style=\"padding:0;line-height:0\"> con dentro <img>. Sbagliato: <td style=\"background:#ffffff;padding:24px\">. Giusto: <td align=\"center\" style=\"padding:0;line-height:0\"><img src=\"...\" style=\"display:block;width:100%;max-width:280px;height:auto;border:0;outline:none\"></td>",
+    "DIMENSIONI IMMAGINI tutte uguali: ogni immagine prodotto deve avere ESATTAMENTE gli stessi attributi width=\"280\" height=\"280\" e stile style=\"display:block;width:100%;max-width:280px;height:280px;object-fit:cover\". Le foto non possono apparire più alte o più basse l'una dall'altra. Sbagliato: lasciare le immagini ad altezza naturale. Giusto: usare object-fit:cover su altezza fissa così tutte le foto hanno lo stesso ingombro visivo.",
+    "TUTTO CENTRATO: ogni <td> testo deve avere align=\"center\" e style=\"text-align:center\". Hero, eyebrow, headline, prezzo, nome prodotto, CTA, payoff, footer: TUTTO va centrato orizzontalmente. Nessun text-align:left mai. Sbagliato: <td style=\"padding:20px\">. Giusto: <td align=\"center\" style=\"text-align:center;padding:20px\">.",
+    "MOBILE 2-PRODOTTI-PER-RIGA: quando l'email mostra 2 o più prodotti affiancati, la griglia DEVE rimanere 2 colonne anche su mobile. NON usare media query che convertono le card a 100% width su schermo piccolo. Sbagliato: @media (max-width:600px) { .product-col { width: 100% !important; display: block; } }. Giusto: @media (max-width:600px) { .product-col { width: 50% !important; } } e fonts ridotti per stare comodi nello stretto. SEMPRE 2 card per riga, MAI 1 per riga su mobile."
+  ],
+
+  // ─────────────────────────────────────────────────
   // DATI PRODOTTO (prezzi, URL, nomi)
   // Regole su come trattare i dati passati in input
   // ─────────────────────────────────────────────────
@@ -80,6 +92,7 @@ export const BRAND_RULES = {
  */
 export function formatBrandRulesForPrompt(): string {
   const sections = [
+    { key: "vincoli_inviolabili", label: "VINCOLI INVIOLABILI — VIETATO RIPETERE QUESTI BUG" },
     { key: "dati_prodotto", label: "DATI PRODOTTO (PRIORITÀ MASSIMA)" },
     { key: "copy_linguaggio", label: "COPY E LINGUAGGIO" },
     { key: "struttura_layout", label: "STRUTTURA E LAYOUT" },
