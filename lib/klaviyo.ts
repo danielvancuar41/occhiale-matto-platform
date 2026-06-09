@@ -3,7 +3,7 @@
  *
  * Fetches the last N email campaigns from Klaviyo, enriches them with
  * recipient/open/click/revenue stats, and shapes them into the format
- * used by the dashboard (matches the legacy hardcoded CAMPAIGNS array).
+ * used by the dashboard.
  *
  * Uses Private API Key (KLAVIYO_API_KEY env var) — read-only operations.
  */
@@ -14,19 +14,19 @@ const KLAVIYO_REVISION = "2024-10-15";
 export type EnrichedCampaign = {
   id: string;
   name: string;
-  date: string;          // ISO YYYY-MM-DD
+  date: string;
   subject: string;
   preview?: string;
   recipients: number;
   delivered: number;
-  opens: number;         // unique opens
-  or: number;            // open rate %
-  clicks: number;        // unique clicks
-  cr: number;            // click rate %
+  opens: number;
+  or: number;
+  clicks: number;
+  cr: number;
   orders: number;
-  rev: number;           // revenue €
+  rev: number;
   unsub: number;
-  type: CampaignType;    // inferred
+  type: CampaignType;
   html?: boolean;
 };
 
@@ -39,10 +39,6 @@ export type CampaignType =
   | "brand"
   | "stagionale";
 
-/**
- * Inferred type from subject keywords. Mirrors the v1 logic so the UI
- * tipology buckets stay consistent with the old hardcoded data.
- */
 function inferType(subject: string, name: string): CampaignType {
   const s = (subject + " " + name).toLowerCase();
   if (/promo|sconto|3x2|saldi|offerta|black/.test(s)) return "promo";
@@ -76,10 +72,6 @@ async function klaviyoFetch(path: string): Promise<any> {
   return res.json();
 }
 
-/**
- * Step 1: list email campaigns. Klaviyo paginates via `next` URL.
- * We fetch up to maxItems campaigns sorted by send time desc.
- */
 async function listCampaigns(maxItems = 75): Promise<any[]> {
   const filter = `filter=${encodeURIComponent('equals(messages.channel,"email")')}`;
   const sort = "sort=-scheduled_at";
@@ -89,17 +81,33 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
   let path: string | null = `/campaigns/?${filter}&${sort}&${include}`;
   let included: any[] = [];
 
+  console.log("[klaviyo] listCampaigns start, path:", path);
+
   while (path && all.length < maxItems) {
     const data: any = await klaviyoFetch(path);
     if (Array.isArray(data?.data)) all.push(...data.data);
     if (Array.isArray(data?.included)) included.push(...data.included);
+    console.log(`[klaviyo] page fetched, accumulated=${all.length}, included=${included.length}`);
     const next = data?.links?.next;
     if (!next) break;
-    // Klaviyo returns full URL, strip the base
     path = next.replace(KLAVIYO_BASE, "");
   }
 
-  // attach included messages to each campaign for subject extraction
+  // FALLBACK: if filter returned 0, try without filter
+  if (all.length === 0) {
+    console.warn("[klaviyo] filter returned 0 — retrying without channel filter");
+    let fallbackPath: string | null = `/campaigns/?${sort}&${include}`;
+    while (fallbackPath && all.length < maxItems) {
+      const data: any = await klaviyoFetch(fallbackPath);
+      if (Array.isArray(data?.data)) all.push(...data.data);
+      if (Array.isArray(data?.included)) included.push(...data.included);
+      console.log(`[klaviyo] fallback fetched, accumulated=${all.length}`);
+      const next = data?.links?.next;
+      if (!next) break;
+      fallbackPath = next.replace(KLAVIYO_BASE, "");
+    }
+  }
+
   for (const c of all) {
     const msgIds = c?.relationships?.["campaign-messages"]?.data?.map((m: any) => m.id) || [];
     c._messages = msgIds.map((id: string) =>
@@ -107,13 +115,10 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
     ).filter(Boolean);
   }
 
+  console.log("[klaviyo] listCampaigns done, returning", all.length, "campaigns");
   return all.slice(0, maxItems);
 }
 
-/**
- * Step 2: get aggregated stats for a batch of campaigns via Reporting API.
- * The campaign-values-reports endpoint accepts up to 100 campaign IDs at a time.
- */
 async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<string, any>> {
   if (!campaignIds.length) return {};
 
@@ -153,7 +158,8 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Klaviyo Reports ${res.status}: ${text.slice(0, 200)}`);
+    console.error(`[klaviyo] Reports ${res.status}: ${text.slice(0, 200)}`);
+    return {};
   }
 
   const json: any = await res.json();
@@ -166,16 +172,24 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
   return map;
 }
 
-/**
- * Main entry point. Returns the last N campaigns enriched with stats,
- * shaped for the dashboard UI.
- */
 export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCampaign[]> {
   const campaigns = await listCampaigns(maxItems);
   if (!campaigns.length) return [];
 
+  // Debug schema introspection
+  if (campaigns[0]) {
+    const sample = campaigns[0];
+    console.log("[klaviyo] sample campaign attrs keys:", Object.keys(sample?.attributes || {}));
+    console.log("[klaviyo] sample send_time:", sample?.attributes?.send_time);
+    console.log("[klaviyo] sample scheduled_at:", sample?.attributes?.scheduled_at);
+    console.log("[klaviyo] sample created_at:", sample?.attributes?.created_at);
+    console.log("[klaviyo] sample name:", sample?.attributes?.name);
+    if (sample._messages?.[0]) {
+      console.log("[klaviyo] sample message attrs keys:", Object.keys(sample._messages[0]?.attributes || {}));
+    }
+  }
+
   const ids = campaigns.map(c => c.id);
-  // Reports API accepts up to 100 at once; we batch in groups of 50 for safety
   const statsMap: Record<string, any> = {};
   for (let i = 0; i < ids.length; i += 50) {
     const batch = ids.slice(i, i + 50);
@@ -192,8 +206,6 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
     const sentAt: string = attrs.send_time || attrs.scheduled_at || attrs.created_at || "";
     const date = sentAt ? sentAt.slice(0, 10) : "";
 
-    // Subject extraction — Klaviyo schema varies between API revisions.
-    // Try multiple paths in order of likelihood.
     const firstMsg = c._messages?.[0];
     const msgAttrs = firstMsg?.attributes || {};
     const def = msgAttrs.definition || {};
@@ -246,8 +258,7 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
       html: true
     };
   })
-  // Filter out campaigns that never sent (no recipients or no date)
-  .filter(c => c.recipients > 0 && c.date)
-  // Most recent first
+  // Keep all campaigns with a valid date (don't filter by recipients)
+  .filter(c => !!c.date)
   .sort((a, b) => b.date.localeCompare(a.date));
 }
