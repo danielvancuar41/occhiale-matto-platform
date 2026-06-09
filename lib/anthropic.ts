@@ -148,12 +148,12 @@ function getTemplateInstructions(style: TemplateStyle, mode: ColorMode): string 
     case "minimal":
       return `### TEMPLATE — MINIMAL (selezionato)
 Vibe: pulito, ariato, prodotto-centrico. Spazi ampi, niente decorazioni inutili. Solo le essenziali sezioni.
-- Header: logo molto piccolo (140px) su sfondo neutro (NO nero pieno), padding generoso 40px verticali
-- Hero: solo headline grande (Bebas Neue 56px desktop, 42px mobile) centrata, NESSUNA immagine hero, NESSUN eyebrow. Solo testo nudo su sfondo neutro. Padding verticale 60-80px.
-- Card prodotto: foto grandissima (max-width 320px), nome breve sotto (20px), prezzo accanto al nome o sotto (16px), CTA mini in basso. Card separate da molto whitespace (margin verticale 40px).
-- NESSUNA sezione decorativa con sfondo a contrasto. Tutto sullo stesso sfondo neutro.
+- Header: IMPORTANTE → il logo OM è BIANCO su PNG trasparente, quindi serve sempre uno sfondo scuro dietro. Soluzione: header con sfondo #1a1a1a a tutta larghezza, logo 140px centrato, padding verticale 36-40px. Il "minimal" si esprime nel resto dell'email, non nell'header (che deve restare scuro per visibilità del logo).
+- Hero: solo headline grande (Bebas Neue 56px desktop, 42px mobile) centrata su sfondo neutro chiaro (${mode === "dark" ? "#1a1a1a" : "#faf7f2"}), NESSUNA immagine hero, NESSUN eyebrow. Solo testo nudo. Padding verticale 60-80px.
+- Card prodotto: foto grandissima (max-width 320px), nome breve sotto (20px), prezzo accanto al nome o sotto (16px), CTA mini in basso. Card separate da molto whitespace (margin verticale 40px). Foto con object-fit:contain (mai cover).
+- NESSUNA sezione decorativa con sfondo a contrasto. Tutto sullo stesso sfondo neutro nel corpo.
 - NIENTE quote block, NIENTE strip feature con emoji (la minimalità lo richiede)
-- Footer ridotto: solo logo, payoff su una riga, 3 negozi su una riga sola con · come separatore, 2 link social testuali
+- Footer: bg scuro #1a1a1a (per coerenza con header e per il logo bianco), logo 130px, payoff su una riga, 3 negozi su una riga sola con · come separatore, 2 link social testuali in colore chiaro
 - CTA finale: bottone outline (border 1.5px solid, sfondo trasparente) più sottile e elegante`;
     
     case "bold":
@@ -272,8 +272,8 @@ DNA VISIVO OCCHIALE MATTO (pattern estratti da campagne con CR > 1.2%)
 - (Solo per template EDITORIAL: anche Playfair Display 700 per le headline serif)
 
 ### CARD PRODOTTO — RICETTA HARD
-1. Foto SENZA rettangolo intorno: <td align="center" style="padding:0;line-height:0"> con dentro <a href="URL"><img src="..." style="display:block;width:100%;max-width:280px;height:280px;object-fit:cover;border:0;outline:none" alt="..."></a>
-2. TUTTE le foto prodotto di tutta l'email DEVONO avere width="280" height="280" identici. NON variare le dimensioni.
+1. Foto SENZA rettangolo intorno: <td align="center" style="padding:0;line-height:0"> con dentro <a href="URL"><img src="..." style="display:block;width:100%;max-width:280px;height:280px;object-fit:contain;background-color:#ffffff;border:0;outline:none" alt="..."></a>
+2. TUTTE le foto prodotto di tutta l'email DEVONO avere width="280" height="280" identici. USA object-fit:CONTAIN (non cover) per NON tagliare la foto. Cover taglierebbe parti dell'occhiale. Contain mantiene la foto intera con eventuale spazio bianco ai lati.
 3. Sotto la foto: blocco con nome prodotto + prezzo + CTA, tutto CENTRATO (align="center" + text-align:center)
 4. CTA varia tra card diverse (LO VOGLIO, PRENDILO, SCOPRILO, È MIO)
 5. Su mobile NON si stacca: rimane 2 prodotti per riga sempre.
