@@ -29,26 +29,44 @@ export async function GET() {
 
 /**
  * POST /api/adv
- * Body: a partial AdvWeek (id is auto-generated, dates required)
+ * Body: partial AdvWeek. Auto-fills missing required fields:
+ * - week_number: max(existing) + 1
+ * - week_start: today - 7 days
+ * - week_end: today
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const supabase = getAdminClient();
 
-    // Required fields
-    if (typeof body.week_number !== "number" || !body.week_start || !body.week_end) {
-      return NextResponse.json(
-        { ok: false, error: "week_number, week_start, week_end required" },
-        { status: 400 }
-      );
+    // Auto-fill missing required fields
+    let week_number = Number(body.week_number);
+    let week_start = body.week_start;
+    let week_end = body.week_end;
+
+    if (!week_number || isNaN(week_number)) {
+      const { data: maxRow } = await supabase
+        .from("adv_weeks")
+        .select("week_number")
+        .order("week_number", { ascending: false })
+        .limit(1)
+        .single();
+      week_number = (maxRow?.week_number || 0) + 1;
+    }
+
+    if (!week_start || !week_end) {
+      const today = new Date();
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      if (!week_start) week_start = sevenDaysAgo.toISOString().slice(0, 10);
+      if (!week_end) week_end = today.toISOString().slice(0, 10);
     }
 
     const insertData: Partial<AdvWeek> = {
-      week_number: body.week_number,
+      week_number,
       week_label: body.week_label || null,
-      week_start: body.week_start,
-      week_end: body.week_end,
+      week_start,
+      week_end,
       notes: body.notes || null,
       acq_spesa: Number(body.acq_spesa) || 0,
       acq_impression: Number(body.acq_impression) || 0,
@@ -75,10 +93,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, week: data });
   } catch (err: any) {
     console.error("[/api/adv] POST error:", err);
-    // Surface unique constraint violation nicely
     if (err.code === "23505") {
       return NextResponse.json(
-        { ok: false, error: "Una settimana con questo numero esiste già" },
+        { ok: false, error: "Una settimana con questo numero esiste già. Cambia il numero o modifica quella esistente." },
         { status: 409 }
       );
     }
@@ -102,7 +119,6 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const supabase = getAdminClient();
 
-    // Whitelist updateable fields
     const allowed: (keyof AdvWeek)[] = [
       "week_number", "week_label", "week_start", "week_end", "notes",
       "acq_spesa", "acq_impression", "acq_click", "acq_acquisti", "acq_revenue",
