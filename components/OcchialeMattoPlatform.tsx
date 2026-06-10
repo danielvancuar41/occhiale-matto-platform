@@ -1738,7 +1738,59 @@ export default function App() {
                       {advSubTab === "compare" && (
                         <div>
                           <div style={{ fontSize:"15px", fontWeight:700, color:"#1a1a1a", marginBottom:"6px" }}>Confronto libero tra settimane</div>
-                          <div style={{ fontSize:"11px", color:"#9a9089", marginBottom:"14px" }}>Seleziona 2-4 settimane da confrontare</div>
+                          <div style={{ fontSize:"11px", color:"#9a9089", marginBottom:"14px" }}>Seleziona 2-4 settimane da confrontare oppure usa i preset rapidi</div>
+
+                          {/* Quick presets */}
+                          <div style={{ display:"flex", gap:"6px", marginBottom:"12px", flexWrap:"wrap" }}>
+                            <button
+                              onClick={() => {
+                                const last2 = advWeeks.slice(0, 2).map((w: any) => w.id);
+                                setAdvCompareIds(last2);
+                              }}
+                              style={{ ...S.btn(false), fontSize:"11px" }}
+                            >📅 Ultime 2 settimane</button>
+                            <button
+                              onClick={() => {
+                                const last4 = advWeeks.slice(0, 4).map((w: any) => w.id);
+                                setAdvCompareIds(last4);
+                              }}
+                              style={{ ...S.btn(false), fontSize:"11px" }}
+                            >📅 Ultime 4 settimane</button>
+                            <button
+                              onClick={() => {
+                                const cutoff = new Date();
+                                cutoff.setDate(cutoff.getDate() - 30);
+                                const filtered = advWeeks
+                                  .filter((w: any) => new Date(w.week_start) >= cutoff)
+                                  .slice(0, 4)
+                                  .map((w: any) => w.id);
+                                setAdvCompareIds(filtered);
+                              }}
+                              style={{ ...S.btn(false), fontSize:"11px" }}
+                            >🗓️ Ultimi 30 giorni</button>
+                            <button
+                              onClick={() => {
+                                const cutoff = new Date();
+                                cutoff.setDate(cutoff.getDate() - 90);
+                                const filtered = advWeeks
+                                  .filter((w: any) => new Date(w.week_start) >= cutoff)
+                                  .slice(0, 4)
+                                  .map((w: any) => w.id);
+                                setAdvCompareIds(filtered);
+                              }}
+                              style={{ ...S.btn(false), fontSize:"11px" }}
+                            >🗓️ Ultimi 90 giorni</button>
+                            {advCompareIds.length > 0 && (
+                              <button
+                                onClick={() => setAdvCompareIds([])}
+                                style={{ ...S.btn(false), fontSize:"11px", color:"#d64545" }}
+                              >✕ Pulisci selezione</button>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize:"10px", color:"#9a9089", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px", fontWeight:700 }}>
+                            Oppure seleziona manualmente ({advCompareIds.length}/4)
+                          </div>
                           <div style={{ display:"flex", gap:"6px", marginBottom:"16px", flexWrap:"wrap" }}>
                             {advWeeks.map((wk: any) => {
                               const selected = advCompareIds.includes(wk.id);
@@ -1850,17 +1902,26 @@ export default function App() {
                                   return (
                                     <div key={m.key} style={{ padding:"14px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"8px" }}>
                                       <div style={{ fontSize:"11px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", marginBottom:"10px", fontWeight:700 }}>{m.label}</div>
-                                      <div style={{ display:"flex", alignItems:"flex-end", gap:"4px", height:"80px", marginBottom:"6px" }}>
-                                        {values.map((v, i) => (
-                                          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"3px" }}>
-                                            <div style={{
-                                              width:"100%", background:m.color,
-                                              height:`${(v/maxV)*100}%`,
-                                              minHeight:"3px", borderRadius:"3px 3px 0 0",
-                                              opacity: 0.85
-                                            }} title={`W${sorted[i].week_number}: ${m.fmt(v)}`} />
-                                          </div>
-                                        ))}
+                                      <div style={{ display:"flex", alignItems:"flex-end", gap:"3px", height:"100px", marginBottom:"6px", padding:"4px 0", borderBottom:"1px solid #f0e8d8" }}>
+                                        {values.map((v, i) => {
+                                          const pct = maxV > 0 ? (v / maxV) * 100 : 0;
+                                          return (
+                                            <div
+                                              key={i}
+                                              style={{
+                                                flex: 1,
+                                                background: m.color,
+                                                height: `${Math.max(pct, 4)}%`,
+                                                minHeight: "4px",
+                                                borderRadius: "3px 3px 0 0",
+                                                opacity: 0.85,
+                                                transition: "height 0.4s ease",
+                                                cursor: "default"
+                                              }}
+                                              title={`W${sorted[i].week_number}: ${m.fmt(v)}`}
+                                            />
+                                          );
+                                        })}
                                       </div>
                                       <div style={{ display:"flex", justifyContent:"space-between", fontSize:"9px", color:"#9a9089", fontFamily:"'Space Mono', monospace" }}>
                                         {sorted.map((wk: any, i: number) => <span key={i}>W{wk.week_number}</span>)}
