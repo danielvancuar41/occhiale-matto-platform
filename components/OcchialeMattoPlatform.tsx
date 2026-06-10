@@ -219,6 +219,38 @@ function AdvKpiCard({ label, value, delta, invertDelta = false, highlight }: {
   );
 }
 
+// ── Preview block for extracted ADV data (shown in autofill section) ──
+function PreviewBlock({ title, data }: { title: string; data: any[][] }) {
+  const visible = data.filter(([_, v]) => v != null && v !== 0 && v !== "0" && v !== "");
+  return (
+    <div style={{ padding:"8px 10px", background:"#faf7f2", borderRadius:"6px", border:"1px solid #f0e8d8" }}>
+      <div style={{ fontSize:"10px", fontWeight:700, color:"#1a1a1a", marginBottom:"4px" }}>{title}</div>
+      {visible.length === 0 ? (
+        <div style={{ fontSize:"10px", color:"#9a9089", fontStyle:"italic" }}>(nessun dato)</div>
+      ) : (
+        visible.map(([k, v], i) => (
+          <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", color:"#3a3a3a", padding:"1px 0" }}>
+            <span>{k}:</span>
+            <b style={{ color:"#1a1a1a", fontFamily:"'Space Mono', monospace" }}>{v}</b>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Theory section block (collapsible-ready) ──
+function TheorySection({ title, children }: { title: string; children: any }) {
+  return (
+    <div style={{ marginBottom:"20px", padding:"16px 20px", background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px" }}>
+      <div style={{ fontSize:"13px", fontWeight:700, color:"#1a1a1a", marginBottom:"10px" }}>{title}</div>
+      <div style={{ fontSize:"12px", lineHeight:1.6, color:"#3a3a3a" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // Helper: format ago time for "Aggiornato 2h fa"
 function formatAgo(iso?: string): string {
   if (!iso) return "mai";
@@ -320,7 +352,7 @@ export default function App() {
   const [advLoading, setAdvLoading] = useState(false);
   const [advError, setAdvError] = useState<string | null>(null);
   const [advSelectedId, setAdvSelectedId] = useState<string | null>(null);
-  const [advSubTab, setAdvSubTab] = useState<"week" | "compare" | "trend" | "diagnosi">("week");
+  const [advSubTab, setAdvSubTab] = useState<"week" | "compare" | "trend" | "diagnosi" | "teoria">("week");
   const [advShowForm, setAdvShowForm] = useState(false);
   const [advEditingId, setAdvEditingId] = useState<string | null>(null);
   const [advDiagnosing, setAdvDiagnosing] = useState(false);
@@ -328,6 +360,14 @@ export default function App() {
   const [advCompareIds, setAdvCompareIds] = useState<string[]>([]);
   const [advForm, setAdvForm] = useState<any>(emptyAdvForm());
   const [advSaving, setAdvSaving] = useState(false);
+
+  // ── ADV: Auto-extract from image or text ──
+  const [advExtractMode, setAdvExtractMode] = useState<"image" | "text">("image");
+  const [advExtractText, setAdvExtractText] = useState("");
+  const [advExtractFile, setAdvExtractFile] = useState<File | null>(null);
+  const [advExtracting, setAdvExtracting] = useState(false);
+  const [advExtracted, setAdvExtracted] = useState<any>(null);
+  const [advExtractError, setAdvExtractError] = useState<string | null>(null);
 
   const htmlRef = useRef(null);
 
@@ -531,6 +571,90 @@ export default function App() {
     });
     setAdvShowForm(true);
   }, []);
+
+  // ── ADV: extract data from screenshot OR text via Claude vision ──
+  const extractAdvData = useCallback(async () => {
+    setAdvExtractError(null);
+    setAdvExtracted(null);
+
+    if (advExtractMode === "image" && !advExtractFile) {
+      setAdvExtractError("Seleziona un'immagine prima");
+      return;
+    }
+    if (advExtractMode === "text" && !advExtractText.trim()) {
+      setAdvExtractError("Incolla il testo del report prima");
+      return;
+    }
+
+    setAdvExtracting(true);
+    try {
+      let body: any;
+      if (advExtractMode === "image" && advExtractFile) {
+        // Convert file to base64
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            const stripped = result.split(",")[1] || result;
+            resolve(stripped);
+          };
+          reader.onerror = () => reject(new Error("Impossibile leggere il file"));
+          reader.readAsDataURL(advExtractFile);
+        });
+        body = {
+          imageBase64: base64,
+          imageMediaType: advExtractFile.type || "image/png"
+        };
+      } else {
+        body = { text: advExtractText };
+      }
+
+      const res = await fetch("/api/adv/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      setAdvExtracted(data.extracted);
+    } catch (err: any) {
+      console.error("[adv/extract] failed:", err);
+      setAdvExtractError(err.message || "Errore estrazione");
+    } finally {
+      setAdvExtracting(false);
+    }
+  }, [advExtractMode, advExtractFile, advExtractText]);
+
+  // ── ADV: apply extracted data to form ──
+  const applyExtractedToForm = useCallback(() => {
+    if (!advExtracted) return;
+    const e = advExtracted;
+    setAdvForm({
+      week_number: e.week_number != null ? String(e.week_number) : advForm.week_number,
+      week_label: e.week_label || advForm.week_label,
+      week_start: e.week_start || advForm.week_start,
+      week_end: e.week_end || advForm.week_end,
+      notes: e.notes || advForm.notes,
+      acq_spesa: String(e.acq_spesa || 0),
+      acq_impression: String(e.acq_impression || 0),
+      acq_click: String(e.acq_click || 0),
+      acq_acquisti: String(e.acq_acquisti || 0),
+      acq_revenue: String(e.acq_revenue || 0),
+      ret_spesa: String(e.ret_spesa || 0),
+      ret_impression: String(e.ret_impression || 0),
+      ret_click: String(e.ret_click || 0),
+      ret_acquisti: String(e.ret_acquisti || 0),
+      ret_revenue: String(e.ret_revenue || 0),
+      tra_spesa: String(e.tra_spesa || 0),
+      tra_impression: String(e.tra_impression || 0),
+      tra_click: String(e.tra_click || 0)
+    });
+    // Reset extract panel
+    setAdvExtracted(null);
+    setAdvExtractFile(null);
+    setAdvExtractText("");
+  }, [advExtracted, advForm]);
 
   // Use live products if available, fallback to hardcoded
   const ACTIVE_PRODUCTS = liveProducts && liveProducts.length > 0 ? liveProducts : PRODUCTS;
@@ -790,6 +914,7 @@ export default function App() {
           <button style={S.tab(tab==="generator")} onClick={()=>{setTab("generator");setStep(0);setResult(null);setHtmlStep(0);setHtmlOutput("");setSelectedSubject(null);}}>{I.spark} Generatore</button>
           <button style={S.tab(tab==="campaigns")} onClick={()=>setTab("campaigns")}>{I.list} Campagne</button>
           <button style={S.tab(tab==="adv")} onClick={()=>setTab("adv")}>📊 ADV</button>
+          <button style={S.tab(tab==="cover")} onClick={()=>setTab("cover")}>🖼️ Cover</button>
         </div>
       </div>
 
@@ -1244,8 +1369,128 @@ export default function App() {
                 <div style={{ fontSize:"14px", fontWeight:700, color:"#1a1a1a" }}>
                   {advEditingId ? "Modifica settimana" : "Nuova settimana ADV"}
                 </div>
-                <button onClick={() => { setAdvShowForm(false); setAdvEditingId(null); setAdvForm(emptyAdvForm()); }} style={{ ...S.btn(false), fontSize:"11px" }}>✕ Annulla</button>
+                <button onClick={() => { setAdvShowForm(false); setAdvEditingId(null); setAdvForm(emptyAdvForm()); setAdvExtracted(null); setAdvExtractFile(null); setAdvExtractText(""); setAdvExtractError(null); }} style={{ ...S.btn(false), fontSize:"11px" }}>✕ Annulla</button>
               </div>
+
+              {/* ── AUTO-FILL panel (only when creating new, not editing) ── */}
+              {!advEditingId && (
+                <div style={{ marginBottom:"16px", padding:"14px", background:"linear-gradient(135deg, #faf7f2 0%, #f5ede0 100%)", border:"1px dashed #b8924a55", borderRadius:"8px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px", flexWrap:"wrap", gap:"6px" }}>
+                    <div style={{ fontSize:"12px", fontWeight:700, color:"#1a1a1a" }}>
+                      🤖 Auto-fill con AI <span style={{ fontWeight:400, color:"#7a7a7a", fontSize:"11px" }}>— evita di scrivere a mano</span>
+                    </div>
+                    <div style={{ display:"flex", gap:"4px" }}>
+                      <button onClick={()=>{setAdvExtractMode("image"); setAdvExtracted(null); setAdvExtractError(null);}} style={{ padding:"5px 11px", fontSize:"11px", borderRadius:"5px", border:"1px solid #e8ddd0", background: advExtractMode==="image" ? "#b8924a" : "#ffffff", color: advExtractMode==="image" ? "#ffffff" : "#3a3a3a", cursor:"pointer", fontWeight: advExtractMode==="image" ? 600 : 400 }}>📸 Screenshot</button>
+                      <button onClick={()=>{setAdvExtractMode("text"); setAdvExtracted(null); setAdvExtractError(null);}} style={{ padding:"5px 11px", fontSize:"11px", borderRadius:"5px", border:"1px solid #e8ddd0", background: advExtractMode==="text" ? "#b8924a" : "#ffffff", color: advExtractMode==="text" ? "#ffffff" : "#3a3a3a", cursor:"pointer", fontWeight: advExtractMode==="text" ? 600 : 400 }}>📝 Testo</button>
+                    </div>
+                  </div>
+
+                  {advExtractMode === "image" && (
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        onChange={e => setAdvExtractFile(e.target.files?.[0] || null)}
+                        style={{ display:"block", marginBottom:"8px", fontSize:"11px", color:"#3a3a3a" }}
+                      />
+                      {advExtractFile && (
+                        <div style={{ fontSize:"10px", color:"#7a7a7a", marginBottom:"8px" }}>
+                          ✓ {advExtractFile.name} · {(advExtractFile.size/1024).toFixed(0)} KB
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {advExtractMode === "text" && (
+                    <textarea
+                      value={advExtractText}
+                      onChange={e => setAdvExtractText(e.target.value)}
+                      placeholder="Incolla qui il messaggio dei ragazzi delle ads. Esempio:&#10;&#10;ACQUISIZIONE ultimi 7gg&#10;Importo Speso: €969,01&#10;Acquisti: 59&#10;CPA: €16,42&#10;ROAS: 2,61&#10;&#10;RETARGETING&#10;Importo Speso: €106,68&#10;..."
+                      style={{ ...S.input, width:"100%", minHeight:"110px", resize:"vertical", fontFamily:"'Space Mono', monospace", fontSize:"11px" }}
+                    />
+                  )}
+
+                  <div style={{ display:"flex", gap:"8px", alignItems:"center", marginTop:"8px" }}>
+                    <button
+                      onClick={extractAdvData}
+                      disabled={advExtracting || (advExtractMode==="image" && !advExtractFile) || (advExtractMode==="text" && !advExtractText.trim())}
+                      style={{
+                        padding:"8px 16px", fontSize:"12px", fontWeight:600,
+                        borderRadius:"6px", border:"none",
+                        background:"linear-gradient(135deg,#b8924a,#8a6630)",
+                        color:"#ffffff", cursor: advExtracting ? "wait" : "pointer",
+                        opacity: (advExtracting || (advExtractMode==="image" && !advExtractFile) || (advExtractMode==="text" && !advExtractText.trim())) ? 0.5 : 1
+                      }}
+                    >
+                      {advExtracting ? "Analizzando..." : "✨ Estrai dati"}
+                    </button>
+                    {advExtractError && <span style={{ fontSize:"11px", color:"#d64545" }}>⚠️ {advExtractError}</span>}
+                  </div>
+
+                  {/* PREVIEW of extracted data */}
+                  {advExtracted && (
+                    <div style={{ marginTop:"12px", padding:"12px 14px", background:"#ffffff", border:"1px solid #b8924a55", borderRadius:"7px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
+                        <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a" }}>
+                          Anteprima dati estratti
+                          {advExtracted.confidence && (
+                            <span style={{
+                              marginLeft:"8px", fontSize:"9px", padding:"2px 6px", borderRadius:"3px",
+                              background: advExtracted.confidence === "high" ? "#1a9d9420" : advExtracted.confidence === "medium" ? "#b8924a20" : "#d6454520",
+                              color: advExtracted.confidence === "high" ? "#1a9d94" : advExtracted.confidence === "medium" ? "#b8924a" : "#d64545",
+                              fontWeight:700
+                            }}>{advExtracted.confidence.toUpperCase()}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"8px", fontSize:"11px" }}>
+                        <PreviewBlock title="🎯 Acquisizione" data={[
+                          ["Spesa", advExtracted.acq_spesa && fmtEuro(advExtracted.acq_spesa)],
+                          ["Acquisti", advExtracted.acq_acquisti],
+                          ["Revenue", advExtracted.acq_revenue && fmtEuro(advExtracted.acq_revenue)],
+                          ["Impression", advExtracted.acq_impression || null],
+                          ["Click", advExtracted.acq_click || null],
+                        ]} />
+                        <PreviewBlock title="🔄 Retargeting" data={[
+                          ["Spesa", advExtracted.ret_spesa && fmtEuro(advExtracted.ret_spesa)],
+                          ["Acquisti", advExtracted.ret_acquisti],
+                          ["Revenue", advExtracted.ret_revenue && fmtEuro(advExtracted.ret_revenue)],
+                          ["Impression", advExtracted.ret_impression || null],
+                          ["Click", advExtracted.ret_click || null],
+                        ]} />
+                        <PreviewBlock title="🚀 Traffico" data={[
+                          ["Spesa", advExtracted.tra_spesa && fmtEuro(advExtracted.tra_spesa)],
+                          ["Click", advExtracted.tra_click],
+                          ["Impression", advExtracted.tra_impression || null],
+                        ]} />
+                      </div>
+
+                      {(advExtracted.week_number || advExtracted.week_label || advExtracted.week_start || advExtracted.notes) && (
+                        <div style={{ marginTop:"8px", padding:"7px 10px", background:"#faf7f2", borderRadius:"5px", fontSize:"10px", color:"#5a5a5a" }}>
+                          {advExtracted.week_number && <span>Settimana #{advExtracted.week_number}</span>}
+                          {advExtracted.week_label && <span> · {advExtracted.week_label}</span>}
+                          {(advExtracted.week_start || advExtracted.week_end) && <span> · {advExtracted.week_start || "?"} → {advExtracted.week_end || "?"}</span>}
+                          {advExtracted.notes && <div style={{ marginTop:"3px", fontStyle:"italic" }}>Note: {advExtracted.notes}</div>}
+                        </div>
+                      )}
+
+                      {advExtracted.warnings && advExtracted.warnings.length > 0 && (
+                        <div style={{ marginTop:"8px", padding:"7px 10px", background:"#fdf2f2", borderRadius:"5px", fontSize:"10px", color:"#d64545" }}>
+                          <b>Avvisi:</b>
+                          <ul style={{ margin:"3px 0 0 16px", padding:0 }}>
+                            {advExtracted.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div style={{ display:"flex", gap:"6px", marginTop:"10px" }}>
+                        <button onClick={applyExtractedToForm} style={{ ...S.btn(true), fontSize:"11px" }}>✓ Accetta e compila form</button>
+                        <button onClick={()=>setAdvExtracted(null)} style={{ ...S.btn(false), fontSize:"11px" }}>↻ Riprova</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Metadati */}
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px", marginBottom:"14px" }}>
@@ -1391,6 +1636,7 @@ export default function App() {
                           {id:"compare", label:"⚖️ Confronto", show:advWeeks.length > 1},
                           {id:"trend", label:"📈 Trend", show:advWeeks.length >= 2},
                           {id:"diagnosi", label:"🔍 Diagnosi AI", show:true},
+                          {id:"teoria", label:"📚 Teoria", show:true},
                         ].filter(s => s.show).map(s => (
                           <button
                             key={s.id}
@@ -1686,12 +1932,236 @@ export default function App() {
                           )}
                         </div>
                       )}
+                      {/* TEORIA */}
+                      {advSubTab === "teoria" && (
+                        <div style={{ maxWidth:"760px" }}>
+                          <div style={{ fontSize:"18px", fontWeight:700, color:"#1a1a1a", marginBottom:"4px" }}>Guida ai report ADV</div>
+                          <div style={{ fontSize:"11px", color:"#9a9089", marginBottom:"20px" }}>La tua bussola per capire cosa significano i numeri, gli acronimi e le metriche di ogni report settimanale.</div>
+
+                          <TheorySection title="🏗️ La struttura delle campagne Meta">
+                            <p>Il sistema pubblicitario di Meta (Facebook + Instagram) funziona su 3 livelli annidati, come una matrioska:</p>
+                            <ol style={{ paddingLeft:"20px", margin:"8px 0" }}>
+                              <li><b>Campagna</b> — il contenitore principale. Si definisce l'obiettivo: vendite, traffico, visibilità.</li>
+                              <li><b>Gruppo di inserzioni (Ad Set)</b> — si definisce a chi mostrare le ads: età, interessi, città, comportamenti.</li>
+                              <li><b>Inserzione (Ad)</b> — la creatività vera e propria: immagine/video + copy + CTA.</li>
+                            </ol>
+                            <p>Nel report settimanale trovi sempre <b>3 campagne distinte</b>: Acquisizione, Retargeting e Traffico. Hanno obiettivi e metriche diverse e <b>non vanno mai confuse tra loro</b>.</p>
+                          </TheorySection>
+
+                          <TheorySection title="💰 CPA — Costo Per Acquisizione">
+                            <p><b>CPA = quanto ti costa, in media, generare un acquisto.</b> Misura l'efficienza di spesa per ogni singolo ordine.</p>
+                            <p><b>Formula:</b> <code style={{ background:"#faf7f2", padding:"2px 6px", borderRadius:"3px", fontSize:"11px" }}>CPA = Spesa totale ÷ Numero acquisti</code></p>
+                            <p><b>Come valutarlo per Occhiale Matto</b> (prezzo medio €29,99):</p>
+                            <ul style={{ paddingLeft:"20px", margin:"6px 0" }}>
+                              <li>CPA sotto <b style={{color:"#1a9d94"}}>€10</b> → eccellente</li>
+                              <li>CPA tra <b style={{color:"#b8924a"}}>€10 e €18</b> → buono, sostenibile</li>
+                              <li>CPA tra <b style={{color:"#d97706"}}>€18 e €25</b> → margini sottili, attenzione</li>
+                              <li>CPA sopra <b style={{color:"#d64545"}}>€25</b> → critico, si perde su quasi ogni acquisto</li>
+                            </ul>
+                            <p>Regola pratica: <b>CPA dovrebbe stare sotto il 30-40% del prezzo medio ordine</b>. Sopra il 50% sei in perdita quasi certa una volta sommati costi prodotto, spedizione e overhead.</p>
+                          </TheorySection>
+
+                          <TheorySection title="📊 ROAS — il numero più importante">
+                            <p><b>ROAS</b> (Return On Ad Spend) <b>= per ogni €1 investito in pubblicità, quanti € di fatturato hai generato?</b> È la metrica regina dell'e-commerce.</p>
+                            <p><b>Formula:</b> <code style={{ background:"#faf7f2", padding:"2px 6px", borderRadius:"3px", fontSize:"11px" }}>ROAS = Revenue ÷ Spesa</code></p>
+                            <p><b>La scala del ROAS</b> (per acquisizione cold):</p>
+                            <ul style={{ paddingLeft:"20px", margin:"6px 0" }}>
+                              <li><b style={{color:"#d64545"}}>Sotto 2.0x</b> → perdita quasi certa, il prodotto non si paga da solo</li>
+                              <li><b style={{color:"#d97706"}}>2.0x - 3.0x</b> → break-even, copri appena i costi</li>
+                              <li><b style={{color:"#b8924a"}}>3.0x - 4.0x</b> → soddisfacente, c'è marginalità</li>
+                              <li><b style={{color:"#1a9d94"}}>Sopra 4.0x</b> → ottimo, puoi pensare a scalare</li>
+                            </ul>
+                            <p>⚠️ Il <b>retargeting</b> ha standard più alti: deve stare <b>sopra 4x</b> per essere considerato sano, idealmente 5-7x. Se scende sotto 3x significa che il bacino caldo si sta esaurendo.</p>
+                          </TheorySection>
+
+                          <TheorySection title="🆚 Acquisizione vs Retargeting (la distinzione chiave)">
+                            <p>Sono <b>due campagne con obiettivi completamente diversi</b> e non vanno mai confrontate direttamente.</p>
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginTop:"10px" }}>
+                              <div style={{ padding:"12px", background:"#faf7f2", borderRadius:"7px" }}>
+                                <div style={{ fontWeight:700, marginBottom:"6px", color:"#1a1a1a" }}>🎯 Acquisizione (cold)</div>
+                                <div style={{ fontSize:"11px", color:"#3a3a3a", lineHeight:1.5 }}>Mostra le ads a chi non ti conosce. Obiettivo: portare nuovi clienti. ROAS più basso, volumi più alti, fa girare l'algoritmo. <b>È il motore del fatturato.</b></div>
+                              </div>
+                              <div style={{ padding:"12px", background:"#faf7f2", borderRadius:"7px" }}>
+                                <div style={{ fontWeight:700, marginBottom:"6px", color:"#1a1a1a" }}>🔄 Retargeting (warm)</div>
+                                <div style={{ fontSize:"11px", color:"#3a3a3a", lineHeight:1.5 }}>Mostra le ads a chi ti ha già visto (visite sito, IG, carrelli abbandonati). ROAS molto più alto, volumi più bassi. <b>Recupera vendite altrimenti perse.</b></div>
+                              </div>
+                            </div>
+                            <p style={{ marginTop:"10px" }}>📐 <b>Mix sano</b>: ~85-90% budget su Acquisizione, ~10-15% su Retargeting. Se il retargeting consuma più del 20% del budget, probabilmente stai bruciando audience troppo veloce.</p>
+                          </TheorySection>
+
+                          <TheorySection title="🚀 La campagna Traffico — a cosa serve davvero">
+                            <p>La campagna Traffico <b>non è ottimizzata per le vendite dirette</b>. Il suo scopo è portare visite qualificate al profilo Instagram, costruire brand awareness e alimentare il pubblico del retargeting.</p>
+                            <p><b>Non aspettarti acquisti diretti da questa campagna.</b> Il suo ROI va misurato indirettamente:</p>
+                            <p style={{ padding:"10px 14px", background:"#faf7f2", borderLeft:"3px solid #b8924a", borderRadius:"4px", margin:"8px 0", fontSize:"11px" }}>
+                              Più persone entrano nel funnel via traffico → più il retargeting ha pubblico su cui lavorare → più acquisti vengono recuperati nel tempo.
+                            </p>
+                            <p><b>KPI da monitorare</b>: costo per click (CPC). Sotto €0.20 va bene per accessori. Sopra €0.35 significa che il pubblico è saturo o il copy non ingaggia.</p>
+                          </TheorySection>
+
+                          <TheorySection title="✅ Checklist settimanale">
+                            <p>Usa questa checklist ogni settimana per leggere autonomamente il report PRIMA di parlare col media buyer:</p>
+                            <table style={{ width:"100%", borderCollapse:"collapse", marginTop:"8px", fontSize:"11px" }}>
+                              <thead>
+                                <tr style={{ background:"#faf7f2" }}>
+                                  <th style={{ padding:"6px 8px", textAlign:"left", fontWeight:700, color:"#3a3a3a", borderBottom:"1px solid #e8ddd0" }}>Metrica</th>
+                                  <th style={{ padding:"6px 8px", textAlign:"left", fontWeight:700, color:"#1a9d94", borderBottom:"1px solid #e8ddd0" }}>OK ✓</th>
+                                  <th style={{ padding:"6px 8px", textAlign:"left", fontWeight:700, color:"#d64545", borderBottom:"1px solid #e8ddd0" }}>Allarme ⚠</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>ROAS acquisizione</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Sopra 3-4x</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Sotto 2x → perdita</td></tr>
+                                <tr><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>CPA</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Sotto 30-40% del prezzo</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Supera 50% prezzo</td></tr>
+                                <tr><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Trend ROAS</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Stabile o in crescita</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>In calo = creative fatigue</td></tr>
+                                <tr><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Acquisti</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Volume stabile a parità budget</td><td style={{ padding:"6px 8px", borderBottom:"1px solid #f5f0ea" }}>Meno acquisti a parità spesa</td></tr>
+                                <tr><td style={{ padding:"6px 8px" }}>CPC traffico</td><td style={{ padding:"6px 8px" }}>Sotto €0.20</td><td style={{ padding:"6px 8px" }}>Sopra €0.35 → pubblico saturo</td></tr>
+                              </tbody>
+                            </table>
+                          </TheorySection>
+
+                          <TheorySection title="🎨 Creative Fatigue — quando le ads si stancano">
+                            <p>Quando una campagna funziona bene e poi inizia a perdere performance, la causa più frequente è la <b>stanchezza creativa</b>. Il pubblico ha visto troppe volte la stessa immagine/video e smette di cliccarci.</p>
+                            <p>Su Meta, una creatività ha <b>vita media di 2-6 settimane</b> prima di perdere efficacia. Più scali il budget, più velocemente si esaurisce.</p>
+                            <p><b>Segnali di fatigue</b>:</p>
+                            <ul style={{ paddingLeft:"20px", margin:"6px 0" }}>
+                              <li>ROAS in calo continuo per 2+ settimane consecutive</li>
+                              <li>CPA in salita progressiva</li>
+                              <li>CTR (click-through rate) che scende</li>
+                              <li>Frequenza per utente che sale (Meta lo mostra nel Business Manager)</li>
+                            </ul>
+                            <p>💡 <b>Soluzione</b>: pianifica sempre un flusso continuo di nuovi contenuti. Idealmente 2-3 nuove creative ogni 10-14 giorni.</p>
+                          </TheorySection>
+
+                          <TheorySection title="📈 Quando scalare il budget?">
+                            <p>Se il ROAS è stabile e sopra il break-even, puoi aumentare il budget. <b>Regola d'oro</b>:</p>
+                            <ul style={{ paddingLeft:"20px", margin:"6px 0" }}>
+                              <li>Non aumentare mai più del <b>20-30% alla volta</b></li>
+                              <li>Aspetta almeno <b>3-5 giorni</b> per vedere l'effetto prima di modificare ancora</li>
+                              <li>Aumenti bruschi rompono l'algoritmo e fanno ripartire la fase di apprendimento</li>
+                            </ul>
+                            <p>Se il ROAS scende dopo lo scaling: torna allo step precedente e aspetta che si stabilizzi.</p>
+                          </TheorySection>
+
+                          <TheorySection title="📖 Glossario rapido">
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 14px", fontSize:"11px" }}>
+                              <div><b>CPA</b>: Cost Per Acquisition</div>
+                              <div><b>ROAS</b>: Return On Ad Spend</div>
+                              <div><b>CPC</b>: Cost Per Click</div>
+                              <div><b>CTR</b>: Click-Through Rate</div>
+                              <div><b>CPM</b>: Cost Per Mille (mille impressioni)</div>
+                              <div><b>AOV</b>: Average Order Value</div>
+                              <div><b>LTV</b>: Lifetime Value</div>
+                              <div><b>MER</b>: Marketing Efficiency Ratio (fatturato totale / spesa ADV totale)</div>
+                              <div><b>Cold</b>: pubblico nuovo, mai interagito</div>
+                              <div><b>Warm</b>: pubblico caldo, già esposto al brand</div>
+                              <div><b>ASC</b>: Advantage+ Shopping Campaign</div>
+                              <div><b>BAU</b>: Business As Usual</div>
+                            </div>
+                          </TheorySection>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
               </div>
             </div>
           )}
+        </div>)}
+
+        {/* ═══ COVER GENERATOR ═══ */}
+        {tab==="cover" && (<div>
+          <div style={{ marginBottom:"20px" }}>
+            <div style={{ fontSize:"18px", fontWeight:700, color:"#1a1a1a" }}>Cover prodotto · Nano Banana</div>
+            <div style={{ fontSize:"11px", color:"#9a9089", marginTop:"4px" }}>
+              Prompt standard per generare lifestyle cover con modelli che indossano gli occhiali Occhiale Matto.
+            </div>
+          </div>
+
+          {/* WORKFLOW STEPS */}
+          <div style={{ marginBottom:"18px", padding:"14px 18px", background:"#faf7f2", borderRadius:"10px", border:"1px solid #e8ddd0" }}>
+            <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", marginBottom:"10px", letterSpacing:"1px", textTransform:"uppercase" }}>🎬 Workflow</div>
+            <ol style={{ paddingLeft:"22px", margin:0, fontSize:"12px", color:"#3a3a3a", lineHeight:1.7 }}>
+              <li>Apri <a href="https://higgsfield.ai" target="_blank" rel="noopener noreferrer" style={{ color:"#b8924a", fontWeight:600 }}>Higgsfield</a> e seleziona <b>Nano Banana Pro</b></li>
+              <li>Carica <b>3 immagini reference</b>:
+                <ul style={{ paddingLeft:"18px", marginTop:"3px" }}>
+                  <li>Foto del modello (per pose, mood, lighting, non per il volto)</li>
+                  <li>Foto frontale dell'occhiale Occhiale Matto</li>
+                  <li>Foto laterale dell'occhiale Occhiale Matto</li>
+                </ul>
+              </li>
+              <li>Copia il prompt qui sotto e incollalo nel campo prompt di Nano Banana</li>
+              <li>Genera. Se il modello somiglia troppo al reference, rigenera (il prompt impone identità diversa)</li>
+              <li>Scarica il risultato e usalo per le cover di Instagram, Shopify, email</li>
+            </ol>
+          </div>
+
+          {/* PROMPT BLOCK */}
+          <div style={{ background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px", overflow:"hidden" }}>
+            <div style={{ padding:"12px 18px", borderBottom:"1px solid #e8ddd0", background:"#faf7f2", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"8px" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, color:"#1a1a1a", letterSpacing:"1px", textTransform:"uppercase" }}>📝 Prompt standard (inglese, ottimizzato per Nano Banana)</div>
+              <button
+                onClick={() => {
+                  const promptText = `Create a realistic close-up portrait of a model wearing the sunglasses shown in the attached product image.\n\nIMPORTANT RULES:\n- The sunglasses must remain EXACTLY the same as in the product photo: same frame shape, same colors, same lenses, same materials and proportions. Do not redesign or reinterpret the glasses.\n- The reference model image is ONLY for inspiration (pose, mood, composition, lighting). The generated person must NOT be the same individual.\n- Create a DIFFERENT model with different facial features, bone structure, and identity. The person can have a similar vibe or style, but must clearly be a different individual.\n- Change facial traits such as jawline, nose shape, eyes, lips, and facial proportions so the face is recognizably different from the reference model.\n- The sunglasses must fit naturally on the face with realistic lighting, reflections, and shadows.\n- Keep the original background from the reference image unchanged.\n- Maintain the same camera angle and composition.\n\nStyle:\nUltra-realistic fashion photography, natural skin texture, high-end lifestyle campaign quality.\n\nFraming:\nClose-up portrait (head and upper shoulders), centered composition, sharp focus on the face and sunglasses.\n\nLighting:\nNatural cinematic lighting consistent with the original image.\n\nGoal:\nA believable lifestyle photo where a new model (different from the reference person) naturally wears the exact sunglasses from the product image.`;
+                  navigator.clipboard.writeText(promptText).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  });
+                }}
+                style={{
+                  padding:"7px 14px",
+                  fontSize:"11px",
+                  fontWeight:600,
+                  borderRadius:"6px",
+                  border:"none",
+                  background: copied ? "#1a9d94" : "linear-gradient(135deg,#b8924a,#8a6630)",
+                  color:"#ffffff",
+                  cursor:"pointer"
+                }}
+              >{copied ? "✓ Copiato!" : "📋 Copia prompt"}</button>
+            </div>
+            <pre style={{
+              margin:0,
+              padding:"18px 22px",
+              fontSize:"12px",
+              lineHeight:1.6,
+              color:"#3a3a3a",
+              fontFamily:"'Space Mono', monospace",
+              whiteSpace:"pre-wrap",
+              wordBreak:"break-word",
+              background:"#ffffff"
+            }}>{`Create a realistic close-up portrait of a model wearing the sunglasses shown in the attached product image.
+
+IMPORTANT RULES:
+- The sunglasses must remain EXACTLY the same as in the product photo: same frame shape, same colors, same lenses, same materials and proportions. Do not redesign or reinterpret the glasses.
+- The reference model image is ONLY for inspiration (pose, mood, composition, lighting). The generated person must NOT be the same individual.
+- Create a DIFFERENT model with different facial features, bone structure, and identity. The person can have a similar vibe or style, but must clearly be a different individual.
+- Change facial traits such as jawline, nose shape, eyes, lips, and facial proportions so the face is recognizably different from the reference model.
+- The sunglasses must fit naturally on the face with realistic lighting, reflections, and shadows.
+- Keep the original background from the reference image unchanged.
+- Maintain the same camera angle and composition.
+
+Style:
+Ultra-realistic fashion photography, natural skin texture, high-end lifestyle campaign quality.
+
+Framing:
+Close-up portrait (head and upper shoulders), centered composition, sharp focus on the face and sunglasses.
+
+Lighting:
+Natural cinematic lighting consistent with the original image.
+
+Goal:
+A believable lifestyle photo where a new model (different from the reference person) naturally wears the exact sunglasses from the product image.`}</pre>
+          </div>
+
+          {/* TIPS */}
+          <div style={{ marginTop:"16px", padding:"12px 16px", background:"#faf7f2", borderLeft:"3px solid #b8924a", borderRadius:"4px", fontSize:"12px", color:"#3a3a3a", lineHeight:1.6 }}>
+            <div style={{ fontWeight:700, marginBottom:"4px" }}>💡 Tips operativi</div>
+            <ul style={{ paddingLeft:"18px", margin:"4px 0 0" }}>
+              <li>Foto prodotto: usa scatti puliti su sfondo neutro, frame ben visibile</li>
+              <li>Foto modello reference: scegli una posa coerente con il mood OM (urban, fashion, lifestyle)</li>
+              <li>Se l'occhiale generato è diverso dall'originale, rigenera 2-3 volte. Nano Banana migliora con le iterazioni</li>
+              <li>Per varianti, cambia solo la foto modello reference mantenendo lo stesso occhiale</li>
+            </ul>
+          </div>
         </div>)}
       </div>
 
