@@ -475,15 +475,11 @@ export default function App() {
 
   // ── ADV: save (create or update) ──
   const saveAdvWeek = useCallback(async () => {
-    if (!advForm.week_number || !advForm.week_start || !advForm.week_end) {
-      alert("Compila almeno: numero settimana, data inizio, data fine");
-      return;
-    }
     setAdvSaving(true);
     try {
       const body = {
         ...advForm,
-        week_number: Number(advForm.week_number)
+        week_number: advForm.week_number ? Number(advForm.week_number) : undefined
       };
       const url = advEditingId ? `/api/adv?id=${advEditingId}` : "/api/adv";
       const method = advEditingId ? "PATCH" : "POST";
@@ -501,11 +497,7 @@ export default function App() {
       setAdvEditingId(null);
       setAdvForm(emptyAdvForm());
       setAdvSelectedId(data.week?.id || null);
-
-      // Auto-trigger AI diagnosis on insert (only for new weeks, not edits)
-      if (!advEditingId && data.week?.id) {
-        diagnoseAdvWeek(data.week.id, "");
-      }
+      // NOTE: diagnosis is no longer auto-triggered. User runs it manually from the Diagnosi AI sub-tab.
     } catch (err: any) {
       alert("Errore salvataggio: " + (err.message || "sconosciuto"));
     } finally {
@@ -1495,19 +1487,19 @@ export default function App() {
               {/* Metadati */}
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px", marginBottom:"14px" }}>
                 <div>
-                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Numero settimana *</label>
-                  <input type="number" value={advForm.week_number} onChange={e=>setAdvForm({...advForm, week_number:e.target.value})} placeholder="es. 6" style={S.input} />
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Numero settimana</label>
+                  <input type="number" value={advForm.week_number} onChange={e=>setAdvForm({...advForm, week_number:e.target.value})} placeholder="auto" style={S.input} />
                 </div>
                 <div>
                   <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Etichetta (opz.)</label>
                   <input type="text" value={advForm.week_label} onChange={e=>setAdvForm({...advForm, week_label:e.target.value})} placeholder="es. Saldi giugno" style={S.input} />
                 </div>
                 <div>
-                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data inizio *</label>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data inizio</label>
                   <input type="date" value={advForm.week_start} onChange={e=>setAdvForm({...advForm, week_start:e.target.value})} style={S.input} />
                 </div>
                 <div>
-                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data fine *</label>
+                  <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", display:"block", marginBottom:"4px" }}>Data fine</label>
                   <input type="date" value={advForm.week_end} onChange={e=>setAdvForm({...advForm, week_end:e.target.value})} style={S.input} />
                 </div>
               </div>
@@ -1552,13 +1544,13 @@ export default function App() {
                 <textarea value={advForm.notes} onChange={e=>setAdvForm({...advForm, notes:e.target.value})} placeholder="es. Nuova creatività lanciata mercoledì, weekend di sconti..." style={{ ...S.input, width:"100%", minHeight:"56px", resize:"vertical" }} />
               </div>
 
-              <div style={{ display:"flex", gap:"8px" }}>
+              <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
                 <button onClick={saveAdvWeek} disabled={advSaving} style={{ ...S.btn(true), opacity: advSaving ? 0.6 : 1 }}>
-                  {advSaving ? "Salvando..." : (advEditingId ? "✓ Salva modifiche" : "✓ Salva e genera diagnosi AI")}
+                  {advSaving ? "Salvando..." : (advEditingId ? "✓ Salva modifiche" : "✓ Salva settimana")}
                 </button>
                 {!advEditingId && (
-                  <div style={{ fontSize:"10px", color:"#9a9089", alignSelf:"center" }}>
-                    Claude analizzerà automaticamente i dati al salvataggio
+                  <div style={{ fontSize:"10px", color:"#9a9089" }}>
+                    💡 La diagnosi AI la generi quando vuoi dalla sub-tab <b>Diagnosi AI</b> della settimana
                   </div>
                 )}
               </div>
@@ -1606,10 +1598,16 @@ export default function App() {
                           <div style={{ fontSize:"9px", color:"#9a9089", fontFamily:"'Space Mono', monospace" }}>{w.week_start?.slice(5)} → {w.week_end?.slice(5)}</div>
                         </div>
                         {w.week_label && <div style={{ fontSize:"10px", color:"#7a7a7a", marginBottom:"6px", fontStyle:"italic" }}>{w.week_label}</div>}
-                        <div style={{ display:"flex", gap:"8px", fontSize:"10px", color:"#5a5a5a" }}>
+                        <div style={{ display:"flex", gap:"8px", fontSize:"10px", color:"#5a5a5a", alignItems:"center" }}>
                           <span>Sp: <b style={{color:"#1a1a1a"}}>{fmtEuro(k?.total_spesa || 0)}</b></span>
                           <span>ROAS: <b style={{color: (k?.total_roas || 0) >= 3 ? "#1a9d94" : (k?.total_roas || 0) >= 2 ? "#b8924a" : "#d64545"}}>{(k?.total_roas || 0).toFixed(2)}x</b></span>
                         </div>
+                        {!w.ai_diagnosis && (
+                          <div style={{ marginTop:"4px", fontSize:"9px", color:"#b8924a", fontWeight:600 }}>⚪ Diagnosi non generata</div>
+                        )}
+                        {w.ai_diagnosis && (
+                          <div style={{ marginTop:"4px", fontSize:"9px", color:"#1a9d94", fontWeight:600 }}>● Diagnosi disponibile</div>
+                        )}
                       </div>
                     );
                   })}
