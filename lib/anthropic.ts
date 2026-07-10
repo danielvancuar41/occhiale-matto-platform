@@ -170,7 +170,7 @@ Vibe: drop, urgenza, statement. Tipografia gigantesca, contrasti forti, alta ene
     case "editorial":
       return `### TEMPLATE — EDITORIAL (selezionato)
 Vibe: magazine, fashion, raffinato. Tipografia mista serif/sans, layout più asimmetrico, sensazione di rivista.
-- Header: logo 160px centrato, sotto micro-data "ISSUE 04 — SUMMER 2026" stile rivista (10px letter-spacing 4px)
+- Header: logo 160px centrato, sotto micro-data "ISSUE — SUMMER 2026" stile rivista (10px letter-spacing 4px). Se il tipo di email suggerisce autunno/inverno, adatta di conseguenza (es. "AUTUMN 2026").
 - Hero: foto grande lifestyle (può essere il primo prodotto), headline in font serif elegante (usa "Playfair Display" via Google Fonts: importa sia Playfair Display 700 sia Bebas Neue sia Montserrat), 56-72px, normal-case, letter-spacing -1px (tight). Sotto la headline una colonna di testo intro 14px line-height 1.8 max-width 480px centrata.
 - Card prodotto: layout magazine-like. Una card può essere "full bleed" (foto a tutta larghezza) e quella accanto "ridotta" (foto + testo accanto). Variare leggermente le proporzioni delle card.
 - Sezioni con titoli numerati ("01 / EDITORIAL", "02 / NEW IN", "03 / STAFF PICKS") in eyebrow 10px
@@ -272,8 +272,8 @@ DNA VISIVO OCCHIALE MATTO (pattern estratti da campagne con CR > 1.2%)
 - (Solo per template EDITORIAL: anche Playfair Display 700 per le headline serif)
 
 ### CARD PRODOTTO — RICETTA HARD
-1. Foto SENZA rettangolo intorno: <td align="center" style="padding:0;line-height:0"> con dentro <a href="URL"><img src="..." style="display:block;width:100%;max-width:280px;height:280px;object-fit:contain;background-color:#ffffff;border:0;outline:none" alt="..."></a>
-2. TUTTE le foto prodotto di tutta l'email DEVONO avere width="280" height="280" identici. USA object-fit:CONTAIN (non cover) per NON tagliare la foto. Cover taglierebbe parti dell'occhiale. Contain mantiene la foto intera con eventuale spazio bianco ai lati.
+1. Foto SENZA rettangolo intorno: <td align="center" style="padding:0;line-height:0"> con dentro <a href="URL"><img src="..." style="display:block;width:100%;max-width:280px;height:280px;object-fit:contain;background-color:transparent;border:0;outline:none" alt="..."></a>
+2. TUTTE le foto prodotto di tutta l'email DEVONO avere width="280" height="280" identici. USA object-fit:CONTAIN (non cover) per NON tagliare la foto. Cover taglierebbe parti dell'occhiale. Contain mantiene la foto intera. Il background-color DEVE essere TRANSPARENT (mai #ffffff), altrimenti compare un rettangolo bianco intorno alla foto.
 3. Sotto la foto: blocco con nome prodotto + prezzo + CTA, tutto CENTRATO (align="center" + text-align:center)
 4. CTA varia tra card diverse (LO VOGLIO, PRENDILO, SCOPRILO, È MIO)
 5. Su mobile NON si stacca: rimane 2 prodotti per riga sempre.
