@@ -81,7 +81,7 @@ export const BRAND_RULES = {
   // ─────────────────────────────────────────────────
   tecnico_html: [
     "Ogni CTA deve avere doppia protezione colore: il bottone <a> deve avere style color inline, E dentro deve esserci uno <span> con 'color:#XXX !important; text-decoration:none !important;' per forzare il colore anche in Gmail dark mode.",
-    "Ogni img deve avere alt text descrittivo reale, non generico (es. 'Occhiale Matto Slick - occhiale da sole estate 2025' e non 'prodotto').",
+    "Ogni img deve avere alt text descrittivo reale, non generico (es. 'Occhiale Matto Slick - occhiale da sole estate 2026' e non 'prodotto').",
     "Non usare display:inline-block su td per layout responsive. Per la strip feature usa table nidificate con width percentuali.",
     "Non mettere style duplicati o in conflitto nello stesso elemento (es. 'color:#1a1a1a' e poi 'color:#f0ebe3' nello stesso style: vince l'ultimo, ma è codice sporco).",
     "Evita CSS grid e flexbox nel body dell'email (supporto email client limitato). Usa solo table con role='presentation'."
