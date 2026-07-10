@@ -229,6 +229,9 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
 export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCampaign[]> {
   _lastStatsError = null;
 
+  const startTime = Date.now();
+  const TIME_BUDGET_MS = 45000; // 45s cutoff, well under Vercel's 60s limit
+
   const campaigns = await listCampaigns(maxItems);
   if (!campaigns.length) return [];
 
@@ -240,11 +243,20 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
   const PAUSE_MS = 1200;
 
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    // TIME BUDGET CHECK — if we're getting close to Vercel's 60s limit, stop and return what we have
+    const elapsedMs = Date.now() - startTime;
+    if (elapsedMs > TIME_BUDGET_MS) {
+      const remaining = ids.length - i;
+      console.warn(`[klaviyo] time budget exceeded (${elapsedMs}ms > ${TIME_BUDGET_MS}ms), skipping remaining ${remaining} campaigns' stats`);
+      _lastStatsError = `Time budget exceeded, stats fetched for ${i} of ${ids.length} campaigns. Refresh to try more.`;
+      break;
+    }
+
     const batch = ids.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
     const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
 
-    console.log(`[klaviyo] stats batch ${batchNum}/${totalBatches} (${batch.length} ids)`);
+    console.log(`[klaviyo] stats batch ${batchNum}/${totalBatches} (${batch.length} ids), elapsed ${elapsedMs}ms`);
 
     try {
       const map = await getStatsForCampaigns(batch);
@@ -255,13 +267,14 @@ export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCam
       _lastStatsError = err?.message || String(err);
     }
 
-    // Pause before next batch (skip after the last one)
-    if (i + BATCH_SIZE < ids.length) {
+    // Pause before next batch (skip after the last one or if near budget)
+    if (i + BATCH_SIZE < ids.length && (Date.now() - startTime) < TIME_BUDGET_MS - PAUSE_MS) {
       await sleep(PAUSE_MS);
     }
   }
 
-  console.log(`[klaviyo] total stats mapped: ${Object.keys(statsMap).length} / ${ids.length}`);
+  const totalElapsed = Date.now() - startTime;
+  console.log(`[klaviyo] total stats mapped: ${Object.keys(statsMap).length} / ${ids.length} in ${totalElapsed}ms`);
 
   return campaigns.map((c): EnrichedCampaign => {
     const attrs = c.attributes || {};
