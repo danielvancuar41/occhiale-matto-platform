@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const limitRaw = url.searchParams.get("limit");
-    const limit = Math.min(Math.max(parseInt(limitRaw || "75", 10) || 75, 1), 200);
+    const limit = Math.min(Math.max(parseInt(limitRaw || "50", 10) || 50, 1), 200);
 
     const campaigns = await fetchEnrichedCampaigns(limit);
     const statsError = getLastStatsError();
