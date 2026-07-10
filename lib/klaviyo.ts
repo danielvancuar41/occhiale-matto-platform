@@ -8,7 +8,7 @@
  */
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
-const KLAVIYO_REVISION = "2024-10-15";
+const KLAVIYO_REVISION = "2026-01-15";
 
 export type EnrichedCampaign = {
   id: string;
@@ -76,7 +76,7 @@ async function klaviyoFetch(path: string): Promise<any> {
   return res.json();
 }
 
-async function listCampaigns(maxItems = 75): Promise<any[]> {
+async function listCampaigns(maxItems = 50, timeBudgetMs = 25000): Promise<any[]> {
   const filter = `filter=${encodeURIComponent('equals(messages.channel,"email")')}`;
   const sort = "sort=-scheduled_at";
   const include = "include=campaign-messages";
@@ -85,9 +85,14 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
   let path: string | null = `/campaigns/?${filter}&${sort}&${include}`;
   let included: any[] = [];
 
-  console.log("[klaviyo] listCampaigns start");
+  const listStartTime = Date.now();
+  console.log("[klaviyo] listCampaigns start, budget", timeBudgetMs, "ms");
 
   while (path && all.length < maxItems) {
+    if (Date.now() - listStartTime > timeBudgetMs) {
+      console.warn(`[klaviyo] listCampaigns time budget exceeded at ${all.length} campaigns`);
+      break;
+    }
     const data: any = await klaviyoFetch(path);
     if (Array.isArray(data?.data)) all.push(...data.data);
     if (Array.isArray(data?.included)) included.push(...data.included);
@@ -100,6 +105,7 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
     console.warn("[klaviyo] filter returned 0 — retrying without channel filter");
     let fallbackPath: string | null = `/campaigns/?${sort}&${include}`;
     while (fallbackPath && all.length < maxItems) {
+      if (Date.now() - listStartTime > timeBudgetMs) break;
       const data: any = await klaviyoFetch(fallbackPath);
       if (Array.isArray(data?.data)) all.push(...data.data);
       if (Array.isArray(data?.included)) included.push(...data.included);
@@ -116,7 +122,7 @@ async function listCampaigns(maxItems = 75): Promise<any[]> {
     ).filter(Boolean);
   }
 
-  console.log("[klaviyo] listCampaigns done:", all.length, "campaigns");
+  console.log(`[klaviyo] listCampaigns done: ${all.length} campaigns in ${Date.now() - listStartTime}ms`);
   return all.slice(0, maxItems);
 }
 
@@ -226,7 +232,7 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
   return map;
 }
 
-export async function fetchEnrichedCampaigns(maxItems = 75): Promise<EnrichedCampaign[]> {
+export async function fetchEnrichedCampaigns(maxItems = 50): Promise<EnrichedCampaign[]> {
   _lastStatsError = null;
 
   const startTime = Date.now();
