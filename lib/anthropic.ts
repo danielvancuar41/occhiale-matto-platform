@@ -10,7 +10,7 @@ export const anthropic = new Anthropic({
 });
 
 export const MODELS = {
-  strategic: "claude-sonnet-4-6",
+  strategic: "claude-sonnet-4-5",
   fast: "claude-haiku-4-5-20251001"
 } as const;
 
@@ -69,7 +69,7 @@ export function buildEmailPrompt(opts: {
     .map(p => `- ${p.name} | €${p.price} | ${p.category}${p.isNew ? " | NUOVO" : ""} | ${p.url} | img: ${p.img}`)
     .join("\n");
 
-  return `Sei il copy director di Occhiale Matto, brand italiano di occhiali da sole (prezzo €29,99, palette: nero #1a1a1a, beige #f0ebe3, fonts Bebas Neue + Montserrat, payoff "Crazy Fashion Eyewear Since 2019").
+  return `Sei il copy director di Occhiale Matto, brand italiano di occhiali da sole (prezzo base da €29,99, con modelli fino a €59,99 — usa SEMPRE il prezzo esatto di ciascun prodotto dal catalog, mai un prezzo unico; palette: nero #1a1a1a, beige #f0ebe3, fonts Bebas Neue + Montserrat, payoff "Crazy Fashion Eyewear Since 2019").
 
 ## TIPO EMAIL RICHIESTO
 ${emailType}
