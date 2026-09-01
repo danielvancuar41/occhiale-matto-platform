@@ -27,6 +27,23 @@ function normalizeTags(raw: any): string[] {
   return [];
 }
 
+/**
+ * Sceglie l'immagine PRODOTTO, mai quella del modello che lo indossa.
+ * Su Shopify le foto "lifestyle" (modello che indossa l'occhiale) hanno la
+ * parola "cover" nel testo alternativo (alt). Le saltiamo: vogliamo lo shot
+ * pulito del prodotto. Regola: prima immagine il cui alt NON contiene "cover".
+ * Fallback: se tutte sono cover o nessuna ha alt, usa la prima disponibile.
+ */
+function pickProductImage(images: any[]): string | null {
+  if (!Array.isArray(images) || images.length === 0) return null;
+  const isCover = (img: any) => String(img?.alt || "").toLowerCase().includes("cover");
+  const clean = images.find(img => img?.src && !isCover(img));
+  if (clean?.src) return clean.src;
+  // fallback: prima immagine con src, anche se cover (meglio una foto che nessuna)
+  const anyImg = images.find(img => img?.src);
+  return anyImg?.src || null;
+}
+
 export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
   const all: ScrapedProduct[] = [];
 
@@ -49,7 +66,6 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
 
     for (const p of products) {
       const firstVariant = p.variants?.[0];
-      const firstImage = p.images?.[0];
 
       all.push({
         id: String(p.id),
@@ -58,7 +74,7 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
         price: parseFloat(firstVariant?.price || "0"),
         comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
         currency: "EUR",
-        imageUrl: firstImage?.src || null,
+        imageUrl: pickProductImage(p.images),
         url: `${STORE_URL}/products/${p.handle}`,
         tags: normalizeTags(p.tags),
         available: (p.variants || []).some((v: any) => v.available),
@@ -88,7 +104,6 @@ export async function scrapeProduct(handle: string): Promise<ScrapedProduct | nu
   if (!p) return null;
 
   const firstVariant = p.variants?.[0];
-  const firstImage = p.images?.[0];
 
   return {
     id: String(p.id),
@@ -97,7 +112,7 @@ export async function scrapeProduct(handle: string): Promise<ScrapedProduct | nu
     price: parseFloat(firstVariant?.price || "0"),
     comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
     currency: "EUR",
-    imageUrl: firstImage?.src || null,
+    imageUrl: pickProductImage(p.images),
     url: `${STORE_URL}/products/${p.handle}`,
     tags: normalizeTags(p.tags),
     available: (p.variants || []).some((v: any) => v.available),
