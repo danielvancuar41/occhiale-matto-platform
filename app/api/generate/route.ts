@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt } from "@/lib/anthropic";
+import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt, OM_LOGO_DARK } from "@/lib/anthropic";
 import type { Campaign, Product, TemplateStyle, ColorMode, StatementPosition } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
@@ -115,13 +115,39 @@ async function generateHtml(body: GenerateRequest) {
     messages: [{ role: "user", content: prompt }]
   });
 
-  const html = resp.content
+  let html = resp.content
     .filter(b => b.type === "text")
     .map(b => (b as any).text)
     .join("\n")
     .replace(/^```html\s*/i, "")
     .replace(/```\s*$/, "")
     .trim();
+
+  // ── SOSTITUZIONE PLACEHOLDER → URL ESATTI ──
+  // Claude usa {{IMG_n}} / {{URL_n}} / {{LOGO}} invece di ricopiare gli URL
+  // (evita typo negli URL immagine, causa di immagini rotte). Qui li rimpiazziamo
+  // con i valori esatti dal catalog, byte per byte.
+  const LOGO_WHITE = "https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png";
+  const templateStyle = body.templateStyle || "classico";
+  const logoUrl = templateStyle === "statement" ? OM_LOGO_DARK : LOGO_WHITE;
+
+  const escapeReg = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const replaceAll = (str: string, find: string, repl: string) =>
+    str.replace(new RegExp(escapeReg(find), "g"), repl);
+
+  (body.selectedProducts || []).forEach((p, i) => {
+    html = replaceAll(html, `{{IMG_${i}}}`, p.img || "");
+    html = replaceAll(html, `{{URL_${i}}}`, p.url || "");
+  });
+  html = replaceAll(html, "{{LOGO}}", logoUrl);
+
+  // Sicurezza: se restano placeholder non sostituiti (es. Claude ne ha inventato uno
+  // in più), li puliamo verso il primo prodotto per non lasciare {{...}} nell'email.
+  const fallbackImg = body.selectedProducts?.[0]?.img || "";
+  const fallbackUrl = body.selectedProducts?.[0]?.url || "";
+  html = html.replace(/\{\{IMG_\d+\}\}/g, fallbackImg)
+             .replace(/\{\{URL_\d+\}\}/g, fallbackUrl)
+             .replace(/\{\{LOGO\}\}/g, logoUrl);
 
   return NextResponse.json({ ok: true, html });
 }
