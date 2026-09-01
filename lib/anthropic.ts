@@ -39,8 +39,13 @@ export type Product = {
   isNew?: boolean;
 };
 
-export type TemplateStyle = "classico" | "minimal" | "bold" | "editorial";
+export type TemplateStyle = "classico" | "minimal" | "bold" | "editorial" | "statement";
 export type ColorMode = "light" | "dark";
+export type StatementPosition = "top" | "bottom" | "both";
+
+// Logo Occhiale Matto NERO (per template statement su fondo bianco).
+// Quello bianco è nella regola tecnica #7 del prompt HTML (per header scuri).
+export const OM_LOGO_DARK = "https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/264a5c95-09ae-4713-835f-a3f31dac4a15.png";
 
 /**
  * Build the layered prompt for email generation (strategy + subjects).
@@ -52,8 +57,10 @@ export function buildEmailPrompt(opts: {
   topPerformers: Campaign[];
   focus?: string;
   notes?: string;
+  templateStyle?: TemplateStyle;
 }) {
-  const { emailType, selectedProducts, recentCampaigns, topPerformers, focus, notes } = opts;
+  const { emailType, selectedProducts, recentCampaigns, topPerformers, focus, notes, templateStyle = "classico" } = opts;
+  const isStatement = templateStyle === "statement";
 
   const recentSummary = recentCampaigns
     .slice(0, 8)
@@ -85,7 +92,16 @@ ${productList}
 
 ${focus ? `## FOCUS STRATEGICO\n${focus}\n` : ""}
 ${notes ? `## NOTE AGGIUNTIVE\n${notes}\n` : ""}
-
+${isStatement ? `## FORMATO STATEMENT (IMPORTANTE)
+Questa è un'email TEMPLATE STATEMENT: minimalista, UN solo occhiale gigante su fondo bianco, con UNA FRASE SECCA gigante come protagonista.
+Il campo "subjects.text" qui NON è la subject della mail: è lo STATEMENT-HERO, cioè la frase gigante stampata nell'email. Proponine di tipi diversi tra loro così l'utente sceglie:
+- il puro nome del modello (es. "${selectedProducts[0]?.name || "MODELLO"}")
+- annuncio/novità (es. "NUOVO", "APPENA arrivato", "TORNATO")
+- prezzo-ancora (es. "DA €${selectedProducts[0]?.price ?? "29,99"}") — solo se ha senso
+- urgenza/scarsità (es. "ULTIMI PEZZI", "EDIZIONE LIMITATA")
+- provocazione urbana OM (frase corta, massimo 4 parole, tono diretto)
+Regole statement: MAX 4 parole, UPPERCASE implicito (verrà reso maiuscolo), nessuna emoji, incisivo. Nel campo "preview" metti comunque una preview email 40-80 caratteri reale (quella sì è il preview text della mail). Dai 4 opzioni varie invece di 3.
+` : ""}
 ## REGOLE BRAND (non negoziabili)
 - Subject: max 35 caratteri, con nome modello noto o hook concreto. Vietate subject vaghe.
 - Preview text: 40-80 caratteri, completa la subject, non la ripete.
@@ -96,12 +112,13 @@ ${notes ? `## NOTE AGGIUNTIVE\n${notes}\n` : ""}
 
 ## OUTPUT RICHIESTO
 Rispondi SOLO con JSON valido, nessun testo prima o dopo, nessun markdown fence.
+${isStatement ? "(Nota: in 'subjects.text' metti gli STATEMENT-HERO, non le subject. Dai 4 opzioni.)" : ""}
 
 {
   "subjects": [
     { "text": "...", "preview": "...", "score": 85, "rationale": "..." },
     { "text": "...", "preview": "...", "score": 82, "rationale": "..." },
-    { "text": "...", "preview": "...", "score": 78, "rationale": "..." }
+    { "text": "...", "preview": "...", "score": 78, "rationale": "..." }${isStatement ? `,\n    { "text": "...", "preview": "...", "score": 75, "rationale": "..." }` : ""}
   ],
   "strategy": {
     "recommendedDay": "Tuesday|Thursday|Saturday",
@@ -143,7 +160,23 @@ function getPaletteForMode(mode: ColorMode): string {
 /**
  * Returns the visual structure instructions for a given template style.
  */
-function getTemplateInstructions(style: TemplateStyle, mode: ColorMode): string {
+function getTemplateInstructions(
+  style: TemplateStyle,
+  mode: ColorMode,
+  statementPosition: StatementPosition = "top"
+): string {
+  const buildStatementPositionBlock = (): string => {
+    switch (statementPosition) {
+      case "bottom":
+        return "L'utente ha scelto TESTO SOTTO. Ordine: [logo] → [foto occhiale gigante] → [eyebrow nome modello] → [STATEMENT gigante] → [bottone CTA] → [footer]. NIENTE testo sopra la foto.";
+      case "both":
+        return "L'utente ha scelto TESTO SOPRA E SOTTO. Ordine: [logo] → [eyebrow + STATEMENT gigante] → [foto occhiale gigante] → [una riga di rinforzo sotto: es. nome modello o prezzo o micro-frase, NON ripetere identico lo statement] → [bottone CTA] → [footer]. Lo statement grande sta SOPRA; sotto la foto solo una riga breve di supporto.";
+      case "top":
+      default:
+        return "L'utente ha scelto TESTO SOPRA (come le drop classiche). Ordine: [logo] → [eyebrow nome modello] → [STATEMENT gigante] → [foto occhiale gigante] → [bottone CTA] → [footer]. NIENTE testo sotto la foto (a parte il bottone).";
+    }
+  };
+
   switch (style) {
     case "minimal":
       return `### TEMPLATE — MINIMAL (selezionato)
@@ -178,6 +211,27 @@ Vibe: magazine, fashion, raffinato. Tipografia mista serif/sans, layout più asi
 - CTA finale: bottone testuale con underline e freccia → (no bottone box pieno, solo link grosso 18px), sotto un piccolo "SHOP THE COLLECTION ↗"
 - Strip feature: trasformata in righe orizzontali eleganti con icona testuale tipo "FREE SHIPPING / 14-DAY RETURNS / UV400" su una riga sola, font 11px letter-spacing 3px`;
     
+    case "statement":
+      return `### TEMPLATE — STATEMENT (selezionato)
+Vibe: minimalismo assoluto, prodotto-eroe. UN solo occhiale gigante, una frase secca, sfondo BIANCO. Ispirato alle email drop di alto livello: zero rumore, tutto sul prodotto e sul messaggio. Questo template IGNORA la modalità colore: è SEMPRE su sfondo bianco.
+
+REGOLE STRUTTURALI FISSE (questo template sovrascrive palette e sezioni alternate):
+- SFONDO: tutta l'email su bianco #ffffff (wrapper e body). NESSUNA sezione scura, NESSUN blocco alternato. Solo bianco pieno dall'header al footer (tranne il bottone CTA e il footer, vedi sotto).
+- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). URL logo nero: ${OM_LOGO_DARK}. Larghezza 150px, centrato, padding verticale 32px, sfondo bianco. NON mettere la striscia nera dietro: questo logo è nero e si legge su bianco.
+- UN SOLO PRODOTTO (mono-prodotto): usa esclusivamente il primo prodotto della lista. Se ne arrivano più di uno, ignora gli altri.
+- FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent (la foto ha già fondo bianco suo, si fonde). Cliccabile (avvolta in <a href="URL_PRODOTTO">). Padding verticale generoso attorno (40-56px) per farla respirare.
+- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, dimensione 64-88px desktop / 48-60px mobile, letter-spacing 1-2px, line-height 0.95, centrato. È il cuore dell'email. Testo = HEADLINE HERO fornito in input.
+- EYEBROW (sopra o sotto lo statement): il nome del modello o micro-testo, 11px letter-spacing 4px UPPERCASE, colore grigio #6a6a6a, centrato.
+
+POSIZIONE DEL TESTO — CONFIGURAZIONE: ${buildStatementPositionBlock()}
+
+- CTA: UN SOLO bottone a pillola (border-radius:999px), stile "PREORDER NOW / SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto. Sotto il bottone, whitespace ampio prima del footer.
+- NIENTE strip feature emoji, NIENTE quote block, NIENTE sezioni multiple prodotto. Il minimalismo è la regola.
+- PREZZO: mostrarlo solo se lo statement NON lo contiene già. Se lo statement dice "A PARTIRE DA €29,99" o simili, non ripeterlo. Altrimenti, riga discreta sotto il nome modello (16px, #1a1a1a). Prezzo SEMPRE esatto dal catalog.
+- FOOTER: quello standard OM (vedi FOOTER OBBLIGATORIO), MA attenzione: il footer usa il logo BIANCO su sfondo scuro #1a1a1a come sempre. Solo header e corpo sono bianchi; il footer resta scuro con logo bianco per coerenza brand.
+
+Risultato: email pulitissima, bianca, con logo nero in alto, frase secca, occhiale gigante, un bottone. Massimo impatto, minimo rumore.`;
+
     case "classico":
     default:
       return `### TEMPLATE — CLASSICO (selezionato, default Occhiale Matto)
@@ -206,6 +260,7 @@ export function buildHtmlPrompt(opts: {
   strategy: string;
   templateStyle?: TemplateStyle;
   colorMode?: ColorMode;
+  statementPosition?: StatementPosition;
 }) {
   const {
     chosenSubject,
@@ -214,8 +269,11 @@ export function buildHtmlPrompt(opts: {
     selectedProducts,
     strategy,
     templateStyle = "classico",
-    colorMode = "light"
+    statementPosition = "top"
   } = opts;
+
+  // Il template statement è SEMPRE su fondo bianco: ignora il colorMode scelto.
+  const colorMode: ColorMode = templateStyle === "statement" ? "light" : (opts.colorMode || "light");
 
   const FOTO_MODELS = new Set([
     "prime", "ghepard-goccia", "ghepard-rett", "elite", "c-smoke",
@@ -232,7 +290,7 @@ PRODOTTO: ${p.name}
 
   const brandRulesBlock = formatBrandRulesForPrompt();
   const paletteBlock = getPaletteForMode(colorMode);
-  const templateBlock = getTemplateInstructions(templateStyle, colorMode);
+  const templateBlock = getTemplateInstructions(templateStyle, colorMode, statementPosition);
 
   return `Genera l'email HTML COMPLETA per Occhiale Matto, pronta da incollare su Klaviyo. Segui i VINCOLI INVIOLABILI, il TEMPLATE selezionato, la PALETTE selezionata, e il DNA VISIVO del brand.
 
