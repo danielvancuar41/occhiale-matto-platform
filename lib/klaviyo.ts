@@ -8,7 +8,11 @@
  */
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
-const KLAVIYO_REVISION = "2026-01-15";
+// IMPORTANTE: deve essere una revision REALE già rilasciata da Klaviyo.
+// "2026-01-15" NON esiste come stabile e fa rispondere l'API con 400.
+// Ultima stabile verificata: 2025-10-15. Changelog:
+// https://developers.klaviyo.com/en/docs/api_versioning_and_deprecation_policy
+const KLAVIYO_REVISION = "2025-10-15";
 
 export type EnrichedCampaign = {
   id: string;
@@ -174,6 +178,14 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
   if (!campaignIds.length) return {};
 
   const conversionMetricId = process.env.KLAVIYO_CONVERSION_METRIC_ID;
+
+  // conversion_metric_id è OBBLIGATORIO per il Reports API di Klaviyo.
+  // Senza, l'endpoint risponde 400 e le stats restano a zero in silenzio.
+  if (!conversionMetricId) {
+    console.error("[klaviyo] KLAVIYO_CONVERSION_METRIC_ID non configurato: il Reports API lo richiede, stats non disponibili.");
+    return {};
+  }
+
   const idsList = campaignIds.map(id => `"${id}"`).join(",");
 
   const body: any = {
@@ -191,9 +203,7 @@ async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<strin
     }
   };
 
-  if (conversionMetricId) {
-    body.data.attributes.conversion_metric_id = conversionMetricId;
-  }
+  body.data.attributes.conversion_metric_id = conversionMetricId;
 
   const result = await reportsCallWithRetry(body);
 
