@@ -94,6 +94,14 @@ const TEMPLATE_OPTIONS = [
   { id:"minimal", label:"Minimal", desc:"Pulito, ariato, prodotto-centrico, niente decorazioni" },
   { id:"bold", label:"Bold", desc:"Tipografia gigante, contrasti forti, vibe drop/urgenza" },
   { id:"editorial", label:"Editorial", desc:"Magazine-style, foto piene, serif elegante" },
+  { id:"statement", label:"Statement", desc:"1 prodotto gigante, frase secca, fondo bianco, logo nero" },
+];
+
+// ── STATEMENT POSITION (solo per template statement) ──
+const STATEMENT_POSITIONS = [
+  { id:"top", label:"Testo sopra", desc:"Frase sopra la foto" },
+  { id:"bottom", label:"Testo sotto", desc:"Frase sotto la foto" },
+  { id:"both", label:"Sopra + sotto", desc:"Frase sopra, rinforzo sotto" },
 ];
 
 // ── COLOR MODES (light/dark for HTML output) ──
@@ -330,7 +338,9 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [step, setStep] = useState(0);
   const [result, setResult] = useState(null);
-  const [config, setConfig] = useState({ type:"multi", focus:"", notes:"", products:[], templateStyle:"classico", colorMode:"light" });
+  const [config, setConfig] = useState({ type:"multi", focus:"", notes:"", products:[], templateStyle:"classico", colorMode:"light", statementPosition:"top" });
+  // Override manuale dello statement-hero (template statement): se valorizzato, vince sulla proposta di Claude
+  const [statementOverride, setStatementOverride] = useState("");
   const [htmlOutput, setHtmlOutput] = useState("");
   const [htmlStep, setHtmlStep] = useState(0); // 0=not started, 1=generating, 2=done
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -806,11 +816,14 @@ export default function App() {
         body: JSON.stringify({
           mode: "html",
           emailType: TYPE_LABELS[config.type] || config.type,
-          chosenSubject: subj.subject,
+          chosenSubject: (config.templateStyle === "statement" && statementOverride.trim())
+            ? statementOverride.trim()
+            : subj.subject,
           chosenPreview: subj.preview,
           strategy: result.email_structure || result.recommendation || "",
           templateStyle: config.templateStyle || "classico",
           colorMode: config.colorMode || "light",
+          statementPosition: config.statementPosition || "top",
           selectedProducts: prodsToUse.map(p => ({
             id: p.id,
             name: p.name,
@@ -1057,7 +1070,44 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Color Mode */}
+              {/* Statement-only: posizione testo + override manuale (appare solo se template=statement) */}
+              {config.templateStyle === "statement" && (
+                <>
+                  <div style={{ marginBottom:"14px" }}>
+                    <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Posizione testo</label>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:"6px" }}>
+                      {STATEMENT_POSITIONS.map(sp => {
+                        const sel = config.statementPosition === sp.id;
+                        return (
+                          <button key={sp.id} onClick={()=>setConfig(p=>({...p,statementPosition:sp.id}))} style={{
+                            padding:"10px 12px", borderRadius:"7px", textAlign:"left",
+                            background: sel ? "#b8924a10" : "#f5f1ea",
+                            border: `1px solid ${sel ? "#b8924a55" : "#e8ddd0"}`,
+                            cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s"
+                          }}>
+                            <div style={{ fontSize:"12px", fontWeight:700, color:sel?"#b8924a":"#1a1a1a", marginBottom:"3px", textTransform:"uppercase", letterSpacing:"1px" }}>{sp.label}</div>
+                            <div style={{ fontSize:"10px", color:"#7a7a7a", lineHeight:1.4 }}>{sp.desc}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ marginBottom:"14px" }}>
+                    <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Statement manuale (opzionale)</label>
+                    <input
+                      type="text"
+                      value={statementOverride}
+                      onChange={e=>setStatementOverride(e.target.value)}
+                      placeholder="Lascia vuoto per usare le proposte di Claude — o scrivi la frase (es. ULTIMI PEZZI)"
+                      style={{ width:"100%", padding:"10px 12px", borderRadius:"7px", border:"1px solid #e8ddd0", background:"#fff", fontFamily:"inherit", fontSize:"13px", color:"#1a1a1a", boxSizing:"border-box" }}
+                    />
+                    <div style={{ fontSize:"9px", color:"#a0a0a0", marginTop:"4px" }}>Se compilato, questa frase sovrascrive lo statement scelto tra le proposte.</div>
+                  </div>
+                </>
+              )}
+
+              {/* Color Mode — nascosto per statement (sempre fondo bianco) */}
+              {config.templateStyle !== "statement" && (
               <div style={{ marginBottom:"14px" }}>
                 <label style={{ fontSize:"10px", color:"#7a7a7a", display:"block", marginBottom:"6px", textTransform:"uppercase", letterSpacing:"1px" }}>Tema colori</label>
                 <div style={{ display:"flex", gap:"6px" }}>
@@ -1086,6 +1136,7 @@ export default function App() {
                   })}
                 </div>
               </div>
+              )}
 
               {/* Products */}
               <div style={{ marginBottom:"14px" }}>
