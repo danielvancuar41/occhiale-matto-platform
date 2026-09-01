@@ -216,21 +216,24 @@ Vibe: magazine, fashion, raffinato. Tipografia mista serif/sans, layout più asi
 Vibe: minimalismo assoluto, prodotto-eroe. UN solo occhiale gigante, una frase secca, sfondo BIANCO. Ispirato alle email drop di alto livello: zero rumore, tutto sul prodotto e sul messaggio. Questo template IGNORA la modalità colore: è SEMPRE su sfondo bianco.
 
 REGOLE STRUTTURALI FISSE (questo template sovrascrive palette e sezioni alternate):
-- SFONDO: tutta l'email su bianco #ffffff (wrapper e body). NESSUNA sezione scura, NESSUN blocco alternato. Solo bianco pieno dall'header al footer (tranne il bottone CTA e il footer, vedi sotto).
-- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). URL logo nero: ${OM_LOGO_DARK}. Larghezza 150px, centrato, padding verticale 32px, sfondo bianco. NON mettere la striscia nera dietro: questo logo è nero e si legge su bianco.
+- SFONDO: tutta l'email su bianco #ffffff, HEADER E FOOTER INCLUSI. NESSUNA sezione scura, NESSUN blocco nero da nessuna parte (tranne il bottone CTA). Bianco pieno dall'alto in basso.
+- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). URL logo nero: ${OM_LOGO_DARK}. Larghezza 150px, centrato, sfondo bianco. SPAZI COMPATTI: padding-top 28px, padding-bottom SOLO 12-16px (il logo deve stare VICINO alla parte testuale sotto, non lontano). NON mettere striscia nera dietro: il logo è nero, si legge su bianco.
 - UN SOLO PRODOTTO (mono-prodotto): usa esclusivamente il primo prodotto della lista. Se ne arrivano più di uno, ignora gli altri.
-- FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent (la foto ha già fondo bianco suo, si fonde). Cliccabile (avvolta in <a href="URL_PRODOTTO">). Padding verticale generoso attorno (40-56px) per farla respirare.
-- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, dimensione 64-88px desktop / 48-60px mobile, letter-spacing 1-2px, line-height 0.95, centrato. È il cuore dell'email. Testo = HEADLINE HERO fornito in input.
-- EYEBROW (sopra o sotto lo statement): il nome del modello o micro-testo, 11px letter-spacing 4px UPPERCASE, colore grigio #6a6a6a, centrato.
+- FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent. Cliccabile (avvolta in <a href="URL_PRODOTTO">). Padding verticale attorno moderato (32-40px), non esagerato.
+- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, dimensione 64-88px desktop / 48-60px mobile, letter-spacing 1-2px, line-height 0.95, centrato. È il cuore dell'email. Testo = HEADLINE HERO fornito in input. Lo spazio tra header e statement deve essere CONTENUTO (24-32px), non un vuoto enorme.
+- EYEBROW (sopra o sotto lo statement): il nome del modello o micro-testo, 11px letter-spacing 4px UPPERCASE, colore grigio #6a6a6a, centrato. Vicino allo statement (margin 8-12px), non distante.
 
 POSIZIONE DEL TESTO — CONFIGURAZIONE: ${buildStatementPositionBlock()}
 
-- CTA: UN SOLO bottone a pillola (border-radius:999px), stile "PREORDER NOW / SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto. Sotto il bottone, whitespace ampio prima del footer.
+- BLOCCO NOME+PREZZO (nuovo layout minimal, sotto la foto): NON impilare "NOME" e poi "€29,99" su due righe grandi centrate (vecchio layout, da NON usare). Nuovo layout: il nome modello piccolo come eyebrow (11px letter-spacing 4px UPPERCASE grigio #6a6a6a), e IL PREZZO come unico elemento in evidenza SOTTO, ma discreto ed elegante: Montserrat 15-16px, colore #1a1a1a, con una sottile linea/separatore o semplicemente centrato con respiro. L'effetto deve essere pulito e da boutique, non un cartellino. Esempio di gerarchia: [eyebrow: JONNY] piccolo, poi [€29,99] leggermente più grande ma sobrio. Niente grassetti pesanti, niente prezzi giganti.
+- PREZZO: mostralo SEMPRE (esatto dal catalog), tranne se lo statement stesso contiene già un prezzo (es. "DA €29,99") — in quel caso non ripeterlo.
+- CTA: UN SOLO bottone a pillola (border-radius:999px), stile "SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto.
 - NIENTE strip feature emoji, NIENTE quote block, NIENTE sezioni multiple prodotto. Il minimalismo è la regola.
-- PREZZO: mostrarlo solo se lo statement NON lo contiene già. Se lo statement dice "A PARTIRE DA €29,99" o simili, non ripeterlo. Altrimenti, riga discreta sotto il nome modello (16px, #1a1a1a). Prezzo SEMPRE esatto dal catalog.
-- FOOTER: quello standard OM (vedi FOOTER OBBLIGATORIO), MA attenzione: il footer usa il logo BIANCO su sfondo scuro #1a1a1a come sempre. Solo header e corpo sono bianchi; il footer resta scuro con logo bianco per coerenza brand.
+- FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO (${OM_LOGO_DARK}) 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), unsubscribe in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
 
-Risultato: email pulitissima, bianca, con logo nero in alto, frase secca, occhiale gigante, un bottone. Massimo impatto, minimo rumore.`;
+IMPORTANTE: questo template è l'ECCEZIONE alla regola "logo sempre su sfondo scuro". Qui il logo (header E footer) è quello NERO su bianco. NON applicare la striscia nera dietro il logo in nessun punto.
+
+Risultato: email pulitissima, tutta bianca (header, corpo, footer), logo nero, frase secca, occhiale gigante, prezzo elegante e discreto, un bottone. Massimo impatto, minimo rumore.`;
 
     case "classico":
     default:
