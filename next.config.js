@@ -5,6 +5,7 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "occhialematto.com" },
+      { protocol: "https", hostname: "www.occhialematto.com" },
       { protocol: "https", hostname: "cdn.shopify.com" }
     ]
   }
