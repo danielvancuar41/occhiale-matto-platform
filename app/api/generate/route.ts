@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt } from "@/lib/anthropic";
-import type { Campaign, Product, TemplateStyle, ColorMode } from "@/lib/anthropic";
+import type { Campaign, Product, TemplateStyle, ColorMode, StatementPosition } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -18,6 +18,7 @@ type GenerateRequest = {
   strategy?: string;
   templateStyle?: TemplateStyle;
   colorMode?: ColorMode;
+  statementPosition?: StatementPosition;
 };
 
 export async function POST(req: NextRequest) {
@@ -58,7 +59,8 @@ async function generateStrategy(body: GenerateRequest) {
     recentCampaigns: body.recentCampaigns,
     topPerformers,
     focus: body.focus,
-    notes: body.notes
+    notes: body.notes,
+    templateStyle: body.templateStyle || "classico"
   });
 
   const resp = await anthropic.messages.create({
@@ -103,7 +105,8 @@ async function generateHtml(body: GenerateRequest) {
     selectedProducts: body.selectedProducts,
     strategy: body.strategy || "",
     templateStyle: body.templateStyle || "classico",
-    colorMode: body.colorMode || "light"
+    colorMode: body.colorMode || "light",
+    statementPosition: body.statementPosition || "top"
   });
 
   const resp = await anthropic.messages.create({
