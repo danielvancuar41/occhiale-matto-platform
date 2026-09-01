@@ -4,12 +4,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/debug-env
+ * GET /api/debug-env?key=XXXX
  * Returns which env vars are visible to the server.
- * Returns only TRUE/FALSE — never the actual values.
- * Safe to call publicly because no secrets are leaked.
+ * Returns only TRUE/FALSE + preview — never the actual values.
+ *
+ * PROTETTO: richiede ?key= uguale a DEBUG_ENV_TOKEN (env var su Vercel).
+ * Se DEBUG_ENV_TOKEN non è settato, l'endpoint è disabilitato (404),
+ * così non resta mai pubblico per sbaglio in produzione.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const token = process.env.DEBUG_ENV_TOKEN;
+  if (!token) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const url = new URL(req.url);
+  if (url.searchParams.get("key") !== token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const env = process.env;
 
   const report = {
@@ -29,10 +42,9 @@ export async function GET() {
       KLAVIYO_CONVERSION_METRIC_ID: describe(env.KLAVIYO_CONVERSION_METRIC_ID),
     },
 
-    // List all env vars that start with SUPABASE_ or NEXT_PUBLIC_SUPABASE
-    // (helps detect typos like SUPABASE → SUPABASE)
+    // Tutte le env che contengono "SUPABASE" (utile per scovare typo nei nomi)
     all_supabase_keys: Object.keys(env)
-      .filter(k => k.toUpperCase().includes("SUPABASE") || k.toUpperCase().includes("SUPABASE"))
+      .filter(k => k.toUpperCase().includes("SUPABASE"))
       .sort()
   };
 
