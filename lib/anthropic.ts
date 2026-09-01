@@ -217,7 +217,7 @@ Vibe: minimalismo assoluto, prodotto-eroe. UN solo occhiale gigante, una frase s
 
 REGOLE STRUTTURALI FISSE (questo template sovrascrive palette e sezioni alternate):
 - SFONDO: tutta l'email su bianco #ffffff, HEADER E FOOTER INCLUSI. NESSUNA sezione scura, NESSUN blocco nero da nessuna parte (tranne il bottone CTA). Bianco pieno dall'alto in basso.
-- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). URL logo nero: ${OM_LOGO_DARK}. Larghezza 150px, centrato, sfondo bianco. SPAZI COMPATTI: padding-top 28px, padding-bottom SOLO 12-16px (il logo deve stare VICINO alla parte testuale sotto, non lontano). NON mettere striscia nera dietro: il logo è nero, si legge su bianco.
+- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). Usa come src il placeholder {{LOGO}} (verrà sostituito con il logo nero corretto). Larghezza 150px, centrato, sfondo bianco. SPAZI COMPATTI: padding-top 28px, padding-bottom SOLO 12-16px (il logo deve stare VICINO alla parte testuale sotto, non lontano). NON mettere striscia nera dietro: il logo è nero, si legge su bianco.
 - UN SOLO PRODOTTO (mono-prodotto): usa esclusivamente il primo prodotto della lista. Se ne arrivano più di uno, ignora gli altri.
 - FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent. Cliccabile (avvolta in <a href="URL_PRODOTTO">). Padding verticale attorno moderato (32-40px), non esagerato.
 - STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, centrato, line-height 0.95. È il cuore dell'email. Testo = HEADLINE HERO fornito in input.
@@ -239,7 +239,7 @@ POSIZIONE DEL TESTO — CONFIGURAZIONE: ${buildStatementPositionBlock()}
 - PREZZO: mostralo SEMPRE (esatto dal catalog) nel blocco sotto la foto, TRANNE se lo statement gigante contiene già il prezzo o la parola "€" (es. statement "JONNY. €29,99. FINITO." oppure "DA €29,99"). In quel caso il prezzo è GIÀ nello statement: NON ripeterlo sotto, mostra solo il nome modello. Regola anti-doppione: il prezzo deve comparire UNA SOLA VOLTA in tutta l'email.
 - CTA: UN SOLO bottone a pillola (border-radius:999px), stile "SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto.
 - NIENTE strip feature emoji, NIENTE quote block, NIENTE sezioni multiple prodotto. Il minimalismo è la regola.
-- FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO (${OM_LOGO_DARK}) 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), unsubscribe in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
+- FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO come src del placeholder {{LOGO}} (stesso logo nero dell'header) a 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), unsubscribe in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
 
 IMPORTANTE: questo template è l'ECCEZIONE alla regola "logo sempre su sfondo scuro". Qui il logo (header E footer) è quello NERO su bianco. NON applicare la striscia nera dietro il logo in nessun punto.
 
@@ -293,11 +293,11 @@ export function buildHtmlPrompt(opts: {
     "quebec", "pigalle", "banlieue", "hype-vintage"
   ]);
 
-  const productBlocks = selectedProducts.map(p => `
+  const productBlocks = selectedProducts.map((p, i) => `
 PRODOTTO: ${p.name}
 - Prezzo: €${p.price}
-- URL pagina: ${p.url}
-- URL immagine: ${p.img}
+- URL pagina: {{URL_${i}}}
+- URL immagine: {{IMG_${i}}}
 - Nuovo: ${p.isNew ? "sì" : "no"}
 - Fotocromatico: ${FOTO_MODELS.has(p.id) ? "sì" : "no"}`).join("\n");
 
@@ -370,13 +370,14 @@ DNA VISIVO OCCHIALE MATTO (pattern estratti da campagne con CR > 1.2%)
 ================================================================
 REGOLE TECNICHE OBBLIGATORIE
 ================================================================
+0. PLACEHOLDER URL — REGOLA ASSOLUTA: per ogni prodotto usa ESATTAMENTE i placeholder forniti, copiati carattere per carattere SENZA modificarli. Per il src dell'immagine usa {{IMG_0}} (secondo prodotto {{IMG_1}}, ecc.). Per l'href della pagina prodotto usa {{URL_0}} ({{URL_1}}, ecc.). Esempio: <a href="{{URL_0}}"><img src="{{IMG_0}}" alt="..."></a>. NON scrivere URL reali, NON inventare URL, NON ricopiare link da altre fonti: SOLO i placeholder. Verranno sostituiti automaticamente dopo la generazione con gli URL esatti. Se scrivi un URL vero invece del placeholder, l'immagine si romperà.
 1. TUTTI GLI STILI INLINE (tranne media query) su ogni td, p, a, span
 2. CTA DOPPIA PROTEZIONE: <a style="color:#...;..."><span style="color:#... !important;text-decoration:none !important;">TESTO</span></a>
-3. Tutte le immagini prodotto cliccabili (avvolte in <a href="URL_PRODOTTO">)
+3. Tutte le immagini prodotto cliccabili (avvolte in <a href="{{URL_n}}">)
 4. Layout: max-width 600px, wrapper width 100%
 5. role="presentation" su OGNI table
 6. Google Fonts import nel <head>: Bebas Neue + Montserrat (e Playfair Display se template EDITORIAL)
-7. Logo header: https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png
+7. Logo header: usa il placeholder {{LOGO}} come src del logo (verrà sostituito con l'URL corretto)
 8. Se 2+ prodotti affiancati: griglia 2 col mantenuta SU MOBILE (vedi vincoli inviolabili)
 9. Prezzo SEMPRE visibile sotto ogni prodotto, ESATTO dal catalog (MAI inventato)
 10. Preheader nascosto con testo reale (no "&nbsp;&nbsp;...")
