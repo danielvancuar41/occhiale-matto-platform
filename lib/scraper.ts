@@ -28,18 +28,32 @@ function normalizeTags(raw: any): string[] {
 }
 
 /**
- * Sceglie l'immagine PRODOTTO, mai quella del modello che lo indossa.
- * Su Shopify le foto "lifestyle" (modello che indossa l'occhiale) hanno la
- * parola "cover" nel testo alternativo (alt). Le saltiamo: vogliamo lo shot
- * pulito del prodotto. Regola: prima immagine il cui alt NON contiene "cover".
- * Fallback: se tutte sono cover o nessuna ha alt, usa la prima disponibile.
+ * Sceglie l'immagine PRODOTTO pulita, scartando le foto lifestyle/modello.
+ * Su questo store le foto del modello che indossa l'occhiale si riconoscono da:
+ *   - alt text che contiene "cover", OPPURE
+ *   - filename che inizia con "hf_" (render generati) o contiene "cover".
+ * Le foto prodotto pulite hanno filename tipo Progettosenzatitolo…, DSC…, IMG_…, …PRODOTTO.
+ * Strategia: scorri TUTTE le immagini e prendi la prima "pulita".
+ * Fallback: se sono tutte sporche o senza src, usa la prima disponibile.
  */
 function pickProductImage(images: any[]): string | null {
   if (!Array.isArray(images) || images.length === 0) return null;
-  const isCover = (img: any) => String(img?.alt || "").toLowerCase().includes("cover");
-  const clean = images.find(img => img?.src && !isCover(img));
+
+  const filenameOf = (src: string) => {
+    try {
+      const path = String(src).split("?")[0];
+      return path.substring(path.lastIndexOf("/") + 1).toLowerCase();
+    } catch { return ""; }
+  };
+  const isDirty = (img: any) => {
+    const alt = String(img?.alt || "").toLowerCase();
+    const fname = filenameOf(img?.src || "");
+    return alt.includes("cover") || /^hf_/.test(fname) || fname.includes("cover");
+  };
+
+  const clean = images.find(img => img?.src && !isDirty(img));
   if (clean?.src) return clean.src;
-  // fallback: prima immagine con src, anche se cover (meglio una foto che nessuna)
+  // fallback: prima immagine con src (meglio una foto che nessuna)
   const anyImg = images.find(img => img?.src);
   return anyImg?.src || null;
 }
