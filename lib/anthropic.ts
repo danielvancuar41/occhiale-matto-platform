@@ -220,13 +220,23 @@ REGOLE STRUTTURALI FISSE (questo template sovrascrive palette e sezioni alternat
 - HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). URL logo nero: ${OM_LOGO_DARK}. Larghezza 150px, centrato, sfondo bianco. SPAZI COMPATTI: padding-top 28px, padding-bottom SOLO 12-16px (il logo deve stare VICINO alla parte testuale sotto, non lontano). NON mettere striscia nera dietro: il logo è nero, si legge su bianco.
 - UN SOLO PRODOTTO (mono-prodotto): usa esclusivamente il primo prodotto della lista. Se ne arrivano più di uno, ignora gli altri.
 - FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent. Cliccabile (avvolta in <a href="URL_PRODOTTO">). Padding verticale attorno moderato (32-40px), non esagerato.
-- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, dimensione 64-88px desktop / 48-60px mobile, letter-spacing 1-2px, line-height 0.95, centrato. È il cuore dell'email. Testo = HEADLINE HERO fornito in input. Lo spazio tra header e statement deve essere CONTENUTO (24-32px), non un vuoto enorme.
+- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, centrato, line-height 0.95. È il cuore dell'email. Testo = HEADLINE HERO fornito in input.
+  DIMENSIONE ADATTIVA (CRITICO — la frase NON deve MAI sbordare oltre i lati):
+  * Frase CORTA (fino a ~12 caratteri, es. "NUOVO", "JONNY"): 72-88px desktop / 48-56px mobile.
+  * Frase MEDIA (13-24 caratteri): 52-64px desktop / 38-46px mobile.
+  * Frase LUNGA (25+ caratteri, es. "JONNY. €29,99. FINITO."): 38-48px desktop / 30-38px mobile.
+  * In OGNI caso il testo deve stare DENTRO il contenitore (max-width 600px con padding laterale 24px): usa word-wrap:break-word e lascia che vada a capo su più righe invece di sforare. MAI una riga che esce dai bordi.
+  ANDARE A CAPO (simmetria): se la frase ha più parole o segmenti separati da punto (es. "JONNY. €29,99. FINITO."), spezzala su PIÙ RIGHE in modo BILANCIATO e centrato, tipicamente una frase/segmento per riga:
+    JONNY.
+    €29,99.
+    FINITO.
+  Ogni riga centrata orizzontalmente, spaziatura verticale uniforme. Il blocco deve risultare SIMMETRICO e ordinato, mai una riga lunghissima che esce dallo schermo. Usa <br> tra i segmenti oppure inserisci a capo ai punti/pause naturali.
 - EYEBROW (sopra o sotto lo statement): il nome del modello o micro-testo, 11px letter-spacing 4px UPPERCASE, colore grigio #6a6a6a, centrato. Vicino allo statement (margin 8-12px), non distante.
 
 POSIZIONE DEL TESTO — CONFIGURAZIONE: ${buildStatementPositionBlock()}
 
 - BLOCCO NOME+PREZZO (nuovo layout minimal, sotto la foto): NON impilare "NOME" e poi "€29,99" su due righe grandi centrate (vecchio layout, da NON usare). Nuovo layout: il nome modello piccolo come eyebrow (11px letter-spacing 4px UPPERCASE grigio #6a6a6a), e IL PREZZO come unico elemento in evidenza SOTTO, ma discreto ed elegante: Montserrat 15-16px, colore #1a1a1a, con una sottile linea/separatore o semplicemente centrato con respiro. L'effetto deve essere pulito e da boutique, non un cartellino. Esempio di gerarchia: [eyebrow: JONNY] piccolo, poi [€29,99] leggermente più grande ma sobrio. Niente grassetti pesanti, niente prezzi giganti.
-- PREZZO: mostralo SEMPRE (esatto dal catalog), tranne se lo statement stesso contiene già un prezzo (es. "DA €29,99") — in quel caso non ripeterlo.
+- PREZZO: mostralo SEMPRE (esatto dal catalog) nel blocco sotto la foto, TRANNE se lo statement gigante contiene già il prezzo o la parola "€" (es. statement "JONNY. €29,99. FINITO." oppure "DA €29,99"). In quel caso il prezzo è GIÀ nello statement: NON ripeterlo sotto, mostra solo il nome modello. Regola anti-doppione: il prezzo deve comparire UNA SOLA VOLTA in tutta l'email.
 - CTA: UN SOLO bottone a pillola (border-radius:999px), stile "SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto.
 - NIENTE strip feature emoji, NIENTE quote block, NIENTE sezioni multiple prodotto. Il minimalismo è la regola.
 - FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO (${OM_LOGO_DARK}) 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), unsubscribe in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
