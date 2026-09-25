@@ -1,18 +1,28 @@
 /**
- * Klaviyo Campaigns Loader v3
+ * Klaviyo Campaigns Loader v4
  *
- * Adds rate-limit handling for the Reports API (429 throttling):
- * - Smaller batches (20 IDs)
- * - Mandatory 1.2s sleep between batches
- * - Auto-retry on 429 with exponential backoff
+ * Il Reports API (campaign-values-reports) ha limiti durissimi:
+ *   Burst 1/s — Steady 2/min — Daily 225/giorno
+ * La v3 faceva 1 chiamata ogni 20 campagne (4 chiamate con limit=75) ad ogni
+ * caricamento pagina → 429 già dalla 3a chiamata, retry con attese da 30s+,
+ * funzione Vercel oltre i 60s → timeout.
+ *
+ * v4:
+ * - UNA sola chiamata Reports per richiesta: filtro solo su send_channel=email,
+ *   Klaviyo restituisce già una riga per campagna/messaggio.
+ * - Righe aggregate per campaign_id (campagne A/B hanno più messaggi).
+ * - Retry su 429 solo se l'attesa sta nel time budget, altrimenti si torna
+ *   subito con le campagne senza stats + statsError visibile.
+ * - Cache in memoria (10 min) per istanza calda, così i reload non bruciano quota.
+ * - Rimosso il fallback senza filtro canale: Klaviyo lo rifiuta sempre con 400.
+ * - Errori 401/403 tradotti (chiave errata / scope mancante).
  */
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
-// IMPORTANTE: deve essere una revision REALE già rilasciata da Klaviyo.
-// "2026-01-15" NON esiste come stabile e fa rispondere l'API con 400.
-// Ultima stabile verificata: 2025-10-15. Changelog:
-// https://developers.klaviyo.com/en/docs/api_versioning_and_deprecation_policy
 const KLAVIYO_REVISION = "2025-10-15";
+
+const STATS_CACHE_TTL_MS = 10 * 60 * 1000;
+const REPORTS_MAX_WAIT_MS = 20000;
 
 export type EnrichedCampaign = {
   id: string;
@@ -42,8 +52,21 @@ export type CampaignType =
   | "brand"
   | "stagionale";
 
+type AggregatedStats = {
+  recipients: number;
+  delivered: number;
+  opens_unique: number;
+  clicks_unique: number;
+  bounced: number;
+  unsubscribes: number;
+  conversions: number;
+  conversion_value: number;
+};
+
 let _lastStatsError: string | null = null;
 export function getLastStatsError() { return _lastStatsError; }
+
+let _statsCache: { at: number; map: Record<string, AggregatedStats> } | null = null;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -58,239 +81,182 @@ function inferType(subject: string, name: string): CampaignType {
   return "brand";
 }
 
-async function klaviyoFetch(path: string): Promise<any> {
-  const apiKey = process.env.KLAVIYO_API_KEY;
-  if (!apiKey) throw new Error("KLAVIYO_API_KEY not configured");
+function headers(apiKey: string) {
+  return {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "revision": KLAVIYO_REVISION
+  };
+}
 
-  const url = `${KLAVIYO_BASE}${path}`;
-  const res = await fetch(url, {
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "revision": KLAVIYO_REVISION
-    },
+function explainError(status: number, text: string): string {
+  const snippet = text.slice(0, 300);
+  if (status === 401) return `Klaviyo 401: API key non valida o revocata (KLAVIYO_API_KEY). ${snippet}`;
+  if (status === 403) return `Klaviyo 403: la private key non ha gli scope necessari (campaigns:read, metrics:read). ${snippet}`;
+  if (status === 429) return `Klaviyo 429: rate limit raggiunto, riprova tra qualche minuto. ${snippet}`;
+  return `Klaviyo ${status}: ${snippet}`;
+}
+
+async function klaviyoFetch(path: string): Promise<any> {
+  const apiKey = process.env.KLAVIYO_API_KEY?.trim();
+  if (!apiKey) throw new Error("KLAVIYO_API_KEY non configurata su Vercel");
+
+  const res = await fetch(`${KLAVIYO_BASE}${path}`, {
+    headers: headers(apiKey),
     cache: "no-store"
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Klaviyo ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(explainError(res.status, text));
   }
   return res.json();
 }
 
-async function listCampaigns(maxItems = 50, timeBudgetMs = 25000): Promise<any[]> {
-  const filter = `filter=${encodeURIComponent('equals(messages.channel,"email")')}`;
+async function listCampaigns(maxItems = 50, timeBudgetMs = 20000): Promise<any[]> {
+  // Il filtro canale è OBBLIGATORIO su GET /campaigns
+  const filter = `filter=${encodeURIComponent("equals(messages.channel,'email')")}`;
   const sort = "sort=-scheduled_at";
   const include = "include=campaign-messages";
 
   const all: any[] = [];
+  const included: any[] = [];
   let path: string | null = `/campaigns/?${filter}&${sort}&${include}`;
-  let included: any[] = [];
-
-  const listStartTime = Date.now();
-  console.log("[klaviyo] listCampaigns start, budget", timeBudgetMs, "ms");
+  const start = Date.now();
 
   while (path && all.length < maxItems) {
-    if (Date.now() - listStartTime > timeBudgetMs) {
+    if (Date.now() - start > timeBudgetMs) {
       console.warn(`[klaviyo] listCampaigns time budget exceeded at ${all.length} campaigns`);
       break;
     }
     const data: any = await klaviyoFetch(path);
     if (Array.isArray(data?.data)) all.push(...data.data);
     if (Array.isArray(data?.included)) included.push(...data.included);
-    const next = data?.links?.next;
-    if (!next) break;
-    path = next.replace(KLAVIYO_BASE, "");
-  }
-
-  if (all.length === 0) {
-    console.warn("[klaviyo] filter returned 0 — retrying without channel filter");
-    let fallbackPath: string | null = `/campaigns/?${sort}&${include}`;
-    while (fallbackPath && all.length < maxItems) {
-      if (Date.now() - listStartTime > timeBudgetMs) break;
-      const data: any = await klaviyoFetch(fallbackPath);
-      if (Array.isArray(data?.data)) all.push(...data.data);
-      if (Array.isArray(data?.included)) included.push(...data.included);
-      const next = data?.links?.next;
-      if (!next) break;
-      fallbackPath = next.replace(KLAVIYO_BASE, "");
-    }
+    const next: string | undefined = data?.links?.next;
+    path = next ? next.replace(KLAVIYO_BASE, "") : null;
   }
 
   for (const c of all) {
     const msgIds = c?.relationships?.["campaign-messages"]?.data?.map((m: any) => m.id) || [];
-    c._messages = msgIds.map((id: string) =>
-      included.find((i: any) => i.type === "campaign-message" && i.id === id)
-    ).filter(Boolean);
+    c._messages = msgIds
+      .map((id: string) => included.find((i: any) => i.type === "campaign-message" && i.id === id))
+      .filter(Boolean);
   }
 
-  console.log(`[klaviyo] listCampaigns done: ${all.length} campaigns in ${Date.now() - listStartTime}ms`);
+  console.log(`[klaviyo] listCampaigns done: ${all.length} campaigns in ${Date.now() - start}ms`);
   return all.slice(0, maxItems);
 }
 
-/**
- * Single Reports API call with retry on 429.
- */
-async function reportsCallWithRetry(
-  body: any,
-  attempt = 1,
-  maxAttempts = 4
-): Promise<{ ok: boolean; status: number; json?: any; errorText?: string; retryAfterMs?: number }> {
-  const apiKey = process.env.KLAVIYO_API_KEY;
+async function reportsCall(body: any, deadline: number, attempt = 1): Promise<
+  { ok: boolean; status: number; json?: any; errorText?: string }
+> {
+  const apiKey = process.env.KLAVIYO_API_KEY!.trim();
 
   const res = await fetch(`${KLAVIYO_BASE}/campaign-values-reports/`, {
     method: "POST",
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "revision": KLAVIYO_REVISION
-    },
+    headers: headers(apiKey),
     body: JSON.stringify(body),
     cache: "no-store"
   });
 
-  if (res.ok) {
-    return { ok: true, status: res.status, json: await res.json() };
-  }
+  if (res.ok) return { ok: true, status: res.status, json: await res.json() };
 
   const text = await res.text();
 
-  // Handle 429 throttling: retry with backoff
-  if (res.status === 429 && attempt < maxAttempts) {
-    // Parse "Expected available in X second" from the error text
-    let waitSec = 2 * attempt; // default: 2s, 4s, 6s
+  if (res.status === 429 && attempt < 3) {
+    const retryAfterHeader = Number(res.headers.get("retry-after"));
     const m = text.match(/Expected available in (\d+(?:\.\d+)?) second/);
-    if (m) waitSec = Math.max(parseFloat(m[1]) + 0.5, waitSec);
-
+    const waitSec = m ? parseFloat(m[1]) + 0.5 : (retryAfterHeader || 2 * attempt);
     const waitMs = Math.ceil(waitSec * 1000);
-    console.warn(`[klaviyo] 429 throttled (attempt ${attempt}/${maxAttempts}), waiting ${waitMs}ms`);
-    await sleep(waitMs);
-    return reportsCallWithRetry(body, attempt + 1, maxAttempts);
+
+    if (Date.now() + waitMs < deadline) {
+      console.warn(`[klaviyo] Reports 429, attendo ${waitMs}ms (tentativo ${attempt})`);
+      await sleep(waitMs);
+      return reportsCall(body, deadline, attempt + 1);
+    }
+    console.warn(`[klaviyo] Reports 429, attesa ${waitMs}ms fuori budget: salto le stats`);
   }
 
   return { ok: false, status: res.status, errorText: text };
 }
 
-async function getStatsForCampaigns(campaignIds: string[]): Promise<Record<string, any>> {
-  if (!campaignIds.length) return {};
+async function getAllEmailCampaignStats(): Promise<Record<string, AggregatedStats>> {
+  if (_statsCache && Date.now() - _statsCache.at < STATS_CACHE_TTL_MS) {
+    console.log("[klaviyo] stats da cache in memoria");
+    return _statsCache.map;
+  }
 
-  const conversionMetricId = process.env.KLAVIYO_CONVERSION_METRIC_ID;
-
-  // conversion_metric_id è OBBLIGATORIO per il Reports API di Klaviyo.
-  // Senza, l'endpoint risponde 400 e le stats restano a zero in silenzio.
+  const conversionMetricId = process.env.KLAVIYO_CONVERSION_METRIC_ID?.trim();
   if (!conversionMetricId) {
-    console.error("[klaviyo] KLAVIYO_CONVERSION_METRIC_ID non configurato: il Reports API lo richiede, stats non disponibili.");
+    _lastStatsError = "KLAVIYO_CONVERSION_METRIC_ID non configurato su Vercel: il Reports API lo richiede.";
+    console.error(`[klaviyo] ${_lastStatsError}`);
     return {};
   }
 
-  const idsList = campaignIds.map(id => `"${id}"`).join(",");
-
-  const body: any = {
+  const body = {
     data: {
       type: "campaign-values-report",
       attributes: {
         statistics: [
           "recipients", "delivered", "opens_unique", "clicks_unique",
-          "bounced", "unsubscribes", "open_rate", "click_rate",
-          "conversions", "conversion_value"
+          "bounced", "unsubscribes", "conversions", "conversion_value"
         ],
         timeframe: { key: "last_365_days" },
-        filter: `contains-any(campaign_id,[${idsList}])`
+        conversion_metric_id: conversionMetricId,
+        filter: "equals(send_channel,'email')"
       }
     }
   };
 
-  body.data.attributes.conversion_metric_id = conversionMetricId;
-
-  const result = await reportsCallWithRetry(body);
+  const result = await reportsCall(body, Date.now() + REPORTS_MAX_WAIT_MS);
 
   if (!result.ok) {
-    const err = `Reports ${result.status}: ${result.errorText?.slice(0, 300)}`;
-    console.error(`[klaviyo] ${err}`);
-    _lastStatsError = err;
+    _lastStatsError = `Reports: ${explainError(result.status, result.errorText || "")}`;
+    console.error(`[klaviyo] ${_lastStatsError}`);
     return {};
   }
 
-  const json = result.json;
-  const attrs = json?.data?.attributes || {};
-  const rows: any[] =
-    attrs.results ||
-    attrs.data ||
-    json?.data?.results ||
-    [];
+  const rows: any[] = result.json?.data?.attributes?.results || [];
+  console.log(`[klaviyo] Reports: ${rows.length} righe`);
 
-  console.log(`[klaviyo] Reports batch returned ${rows.length} rows`);
-  if (rows.length > 0) {
-    console.log("[klaviyo] Sample row keys:", Object.keys(rows[0] || {}));
-  }
-
-  const map: Record<string, any> = {};
+  const map: Record<string, AggregatedStats> = {};
   for (const row of rows) {
-    const cid =
-      row?.groupings?.campaign_id ||
-      row?.campaign_id ||
-      row?.id ||
-      row?.dimensions?.[0];
-    if (cid) {
-      map[cid] = row.statistics || row.values || row || {};
-    }
+    const cid = row?.groupings?.campaign_id;
+    if (!cid) continue;
+    const s = row.statistics || {};
+    const acc = map[cid] || (map[cid] = {
+      recipients: 0, delivered: 0, opens_unique: 0, clicks_unique: 0,
+      bounced: 0, unsubscribes: 0, conversions: 0, conversion_value: 0
+    });
+    acc.recipients += Number(s.recipients || 0);
+    acc.delivered += Number(s.delivered || 0);
+    acc.opens_unique += Number(s.opens_unique || 0);
+    acc.clicks_unique += Number(s.clicks_unique || 0);
+    acc.bounced += Number(s.bounced || 0);
+    acc.unsubscribes += Number(s.unsubscribes || 0);
+    acc.conversions += Number(s.conversions || 0);
+    acc.conversion_value += Number(s.conversion_value || 0);
   }
 
+  _statsCache = { at: Date.now(), map };
   return map;
 }
 
 export async function fetchEnrichedCampaigns(maxItems = 50): Promise<EnrichedCampaign[]> {
   _lastStatsError = null;
-
-  const startTime = Date.now();
-  const TIME_BUDGET_MS = 45000; // 45s cutoff, well under Vercel's 60s limit
+  const start = Date.now();
 
   const campaigns = await listCampaigns(maxItems);
   if (!campaigns.length) return [];
 
-  const ids = campaigns.map(c => c.id);
-  const statsMap: Record<string, any> = {};
+  const statsMap = await getAllEmailCampaignStats();
 
-  // Batch in groups of 20 with 1.2s pause between batches
-  const BATCH_SIZE = 20;
-  const PAUSE_MS = 1200;
-
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    // TIME BUDGET CHECK — if we're getting close to Vercel's 60s limit, stop and return what we have
-    const elapsedMs = Date.now() - startTime;
-    if (elapsedMs > TIME_BUDGET_MS) {
-      const remaining = ids.length - i;
-      console.warn(`[klaviyo] time budget exceeded (${elapsedMs}ms > ${TIME_BUDGET_MS}ms), skipping remaining ${remaining} campaigns' stats`);
-      _lastStatsError = `Time budget exceeded, stats fetched for ${i} of ${ids.length} campaigns. Refresh to try more.`;
-      break;
-    }
-
-    const batch = ids.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
-
-    console.log(`[klaviyo] stats batch ${batchNum}/${totalBatches} (${batch.length} ids), elapsed ${elapsedMs}ms`);
-
-    try {
-      const map = await getStatsForCampaigns(batch);
-      Object.assign(statsMap, map);
-      console.log(`[klaviyo] batch ${batchNum} ok: mapped ${Object.keys(map).length} stats so far`);
-    } catch (err: any) {
-      console.error(`[klaviyo] batch ${batchNum} failed:`, err?.message || err);
-      _lastStatsError = err?.message || String(err);
-    }
-
-    // Pause before next batch (skip after the last one or if near budget)
-    if (i + BATCH_SIZE < ids.length && (Date.now() - startTime) < TIME_BUDGET_MS - PAUSE_MS) {
-      await sleep(PAUSE_MS);
-    }
+  const withStats = campaigns.filter(c => statsMap[c.id]).length;
+  console.log(`[klaviyo] stats mappate ${withStats}/${campaigns.length} in ${Date.now() - start}ms`);
+  if (!_lastStatsError && Object.keys(statsMap).length > 0 && withStats === 0) {
+    _lastStatsError = "Reports OK ma nessuna campagna combacia: controlla che la key sia dello stesso account Klaviyo.";
   }
-
-  const totalElapsed = Date.now() - startTime;
-  console.log(`[klaviyo] total stats mapped: ${Object.keys(statsMap).length} / ${ids.length} in ${totalElapsed}ms`);
 
   return campaigns.map((c): EnrichedCampaign => {
     const attrs = c.attributes || {};
@@ -304,39 +270,17 @@ export async function fetchEnrichedCampaigns(maxItems = 50): Promise<EnrichedCam
     const renderOptions = msgAttrs.render_options || {};
 
     const subject =
-      content.subject ||
-      def.subject ||
-      msgAttrs.subject ||
-      renderOptions.subject ||
-      attrs.name ||
-      "";
-
+      content.subject || def.subject || msgAttrs.subject || renderOptions.subject || attrs.name || "";
     const preview =
-      content.preview_text ||
-      def.preview_text ||
-      msgAttrs.preview_text ||
-      renderOptions.preview_text ||
-      "";
+      content.preview_text || def.preview_text || msgAttrs.preview_text || renderOptions.preview_text || "";
 
-    const stats = statsMap[c.id] || {};
-    const recipients = Number(stats.recipients || 0);
-    const delivered = Number(stats.delivered || recipients);
-    const opens = Number(stats.opens_unique || 0);
-    const clicks = Number(stats.clicks_unique || 0);
-    const orders = Number(stats.conversions || 0);
-    const rev = Number(stats.conversion_value || 0);
-    const unsub = Number(stats.unsubscribes || 0);
-
-    const orFromStats = Number(stats.open_rate || 0);
-    const crFromStats = Number(stats.click_rate || 0);
-
-    const or = orFromStats > 0
-      ? (orFromStats <= 1 ? orFromStats * 100 : orFromStats)
-      : (delivered > 0 ? (opens / delivered) * 100 : 0);
-
-    const cr = crFromStats > 0
-      ? (crFromStats <= 1 ? crFromStats * 100 : crFromStats)
-      : (delivered > 0 ? (clicks / delivered) * 100 : 0);
+    const s = statsMap[c.id];
+    const recipients = s?.recipients || 0;
+    const delivered = s?.delivered || recipients;
+    const opens = s?.opens_unique || 0;
+    const clicks = s?.clicks_unique || 0;
+    const or = delivered > 0 ? (opens / delivered) * 100 : 0;
+    const cr = delivered > 0 ? (clicks / delivered) * 100 : 0;
 
     return {
       id: c.id,
@@ -350,9 +294,9 @@ export async function fetchEnrichedCampaigns(maxItems = 50): Promise<EnrichedCam
       or: Number(or.toFixed(2)),
       clicks,
       cr: Number(cr.toFixed(2)),
-      orders,
-      rev: Number(rev.toFixed(2)),
-      unsub,
+      orders: s?.conversions || 0,
+      rev: Number((s?.conversion_value || 0).toFixed(2)),
+      unsub: s?.unsubscribes || 0,
       type: inferType(subject, attrs.name || ""),
       html: true
     };
