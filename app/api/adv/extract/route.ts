@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, MODELS } from "@/lib/anthropic";
+import type Anthropic from "@anthropic-ai/sdk";
+import { runClaude, parseJsonLoose, ClaudeRefusalError } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+type ImageType = (typeof IMAGE_TYPES)[number];
 
 type ExtractRequest = {
   imageBase64?: string;
@@ -51,7 +55,7 @@ Anche se è nel report, lascia perdere. Calcoliamo noi.
   * week_start = data trovata
   * week_end = data + 6 giorni
 - Se vedi "ultimi 7 gg" senza data esplicita → lascia null entrambe (warning: "Date dedotte mancanti")
-- Anno: se non specificato, usa l'anno corrente (2026 per ora)
+- Anno: se non specificato, usa l'anno corrente (${new Date().getFullYear()})
 
 ### 5. SINONIMI ITALIANI COMUNI
 - "spesa" = "importo speso" = "budget" = "ad spend"
@@ -114,15 +118,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const content: any[] = [];
+    const content: Anthropic.Beta.BetaContentBlockParam[] = [];
     const dateHint = body.reportDate ? `\n[Data report: ${body.reportDate}]` : "";
 
     if (body.imageBase64) {
+      const mediaType: ImageType = IMAGE_TYPES.includes(body.imageMediaType as ImageType)
+        ? (body.imageMediaType as ImageType)
+        : "image/png";
       content.push({
         type: "image",
         source: {
           type: "base64",
-          media_type: body.imageMediaType || "image/png",
+          media_type: mediaType,
           data: body.imageBase64
         }
       });
@@ -137,28 +144,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const resp = await anthropic.messages.create({
-      model: MODELS.strategic,
-      max_tokens: 1500,
+    const { text: raw } = await runClaude({
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content }]
+      content,
+      maxTokens: 4000,
+      effort: "low"
     });
-
-    const raw = resp.content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
-      .join("\n")
-      .trim();
-
-    const cleaned = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
 
     let parsed: any;
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = parseJsonLoose(raw);
     } catch (parseErr) {
       console.error("[/api/adv/extract] JSON parse failed. Raw:", raw);
       return NextResponse.json(
@@ -207,6 +202,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, extracted: parsed });
   } catch (err: any) {
+    if (err instanceof ClaudeRefusalError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 422 });
+    }
     console.error("[/api/adv/extract] error:", err);
     return NextResponse.json(
       { ok: false, error: err.message || "Internal error" },

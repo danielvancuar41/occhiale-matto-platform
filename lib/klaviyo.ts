@@ -70,16 +70,32 @@ let _statsCache: { at: number; map: Record<string, AggregatedStats> } | null = n
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-function inferType(subject: string, name: string): CampaignType {
-  const s = (subject + " " + name).toLowerCase();
-  if (/promo|sconto|3x2|saldi|offerta|black/.test(s)) return "promo";
-  if (/grazie|buone feste|natale|capodanno|community|dicono|preferiti/.test(s)) return "community";
-  if (/pasqua|primavera|estate|inverno|stagione/.test(s)) return "stagionale";
-  if (/è arrivato|arrivati|nuovo|drop/.test(s)) return "drop";
-  if (/vs |\bvs\b|nuovi|loro|tutti/.test(s)) return "multi";
-  if (/fotocromat|categoria|ottica|sole/.test(s)) return "categoria";
+/**
+ * Tipologia dalla subject (regole tarate sulle subject reali OM). Se la subject non
+ * dice nulla si prova col nome campagna, a meno che sia un generico "E-mail 1".
+ */
+function classifySubject(text: string): CampaignType {
+  const s = ` ${String(text || "").toLowerCase().replace(/[’`]/g, "'")} `;
+  if (/\b(promo|sconto|sconti|saldi|offerta|offerte|coupon|black friday|cyber monday)\b|\d\s?[x×]\s?\d|prendi\s+\d|paghi\s+\d|\d+\s?%/.test(s)) return "promo";
+  if (/(grazie|buone feste|auguri|community|lo dicono|dicono loro|recension|i vostri|vostri preferiti)/.test(s)) return "community";
+  if (/(pasqua|primavera|estate|estiv|autunno|inverno|stagion|natale|capodanno|san valentino|halloween|ferragosto|rientro|nuovo anno|buoni propositi)/.test(s)) return "stagionale";
+  if (/(fotocromat|ottica|\bvista\b|acetato|\bsport|polarizzat|vedere meglio|ogni luce|lenti graduat)/.test(s)) return "categoria";
+  if (/\bvs\.?\s|\s\+\s|\s&\s|\b(2|3|4|5|6|7|8|9|10|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\b\s+(modelli|occhiali|novit|icone|ghepard|hype|colori|look|stili)|nuovi arrivi|best ?seller|più venduti|scegli il tuo|quanti sono|non sbagliano|quelli che|\bo\s[^?]*\?|\bnuovi\b/.test(s)) return "multi";
+  if (/(è arrivat|e' arrivat|sono arrivat|è tornat|sono tornat|finalmente qui|appena arrivat|in arrivo|new in|\bdrop\b|\bnuov[oa]\b|^ modello\s)/.test(s)) return "drop";
   return "brand";
 }
+
+function inferType(subject: string, name: string): CampaignType {
+  const fromSubject = classifySubject(subject);
+  if (fromSubject !== "brand") return fromSubject;
+  const n = String(name || "").trim();
+  if (!n || /^e-?mail\s*\d*$/i.test(n)) return "brand";
+  // "Mercoledì 4/03 - Clinica Ottica" → "Clinica Ottica"
+  return classifySubject(n.replace(/^[^-]*-\s*/, ""));
+}
+
+// Campagne da escludere: bozze, programmate non ancora partite, annullate.
+const EXCLUDED_STATUS = /draft|bozza|scheduled|cancel|queued without/i;
 
 function headers(apiKey: string) {
   return {
@@ -181,6 +197,20 @@ async function reportsCall(body: any, deadline: number, attempt = 1): Promise<
   return { ok: false, status: res.status, errorText: text };
 }
 
+/**
+ * Se il Reports API fallisce (tipicamente 429) ma abbiamo stats più vecchie in memoria,
+ * meglio mostrare quelle (segnalandolo) che azzerare tutte le campagne.
+ */
+function staleStatsOr(errorMsg: string): Record<string, AggregatedStats> {
+  if (_statsCache) {
+    const ageMin = Math.round((Date.now() - _statsCache.at) / 60000);
+    _lastStatsError = `${errorMsg} — mostro le statistiche di ${ageMin} min fa.`;
+    return _statsCache.map;
+  }
+  _lastStatsError = errorMsg;
+  return {};
+}
+
 async function getAllEmailCampaignStats(): Promise<Record<string, AggregatedStats>> {
   if (_statsCache && Date.now() - _statsCache.at < STATS_CACHE_TTL_MS) {
     console.log("[klaviyo] stats da cache in memoria");
@@ -212,9 +242,9 @@ async function getAllEmailCampaignStats(): Promise<Record<string, AggregatedStat
   const result = await reportsCall(body, Date.now() + REPORTS_MAX_WAIT_MS);
 
   if (!result.ok) {
-    _lastStatsError = `Reports: ${explainError(result.status, result.errorText || "")}`;
+    const map = staleStatsOr(`Reports: ${explainError(result.status, result.errorText || "")}`);
     console.error(`[klaviyo] ${_lastStatsError}`);
-    return {};
+    return map;
   }
 
   const rows: any[] = result.json?.data?.attributes?.results || [];
@@ -247,7 +277,13 @@ export async function fetchEnrichedCampaigns(maxItems = 50): Promise<EnrichedCam
   _lastStatsError = null;
   const start = Date.now();
 
-  const campaigns = await listCampaigns(maxItems);
+  const today = new Date().toISOString().slice(0, 10);
+  const campaigns = (await listCampaigns(maxItems)).filter(c => {
+    const attrs = c?.attributes || {};
+    if (EXCLUDED_STATUS.test(String(attrs.status || ""))) return false;
+    const sent = String(attrs.send_time || attrs.scheduled_at || "").slice(0, 10);
+    return !sent || sent <= today;
+  });
   if (!campaigns.length) return [];
 
   const statsMap = await getAllEmailCampaignStats();

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, MODELS } from "@/lib/anthropic";
+import { runClaude, ClaudeRefusalError } from "@/lib/anthropic";
 import { getAdminClient, AdvWeek, deriveKPIs } from "@/lib/supabase";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type DiagnoseRequest = {
   weekId?: string;        // diagnose a single week
@@ -44,17 +44,19 @@ export async function POST(req: NextRequest) {
 
     const prompt = buildDiagnosePrompt(target, prior, body.focus);
 
-    const resp = await anthropic.messages.create({
-      model: MODELS.strategic,
-      max_tokens: 2500,
-      messages: [{ role: "user", content: prompt }]
+    const { text: diagnosis, stopReason } = await runClaude({
+      content: prompt,
+      maxTokens: 16000,
+      effort: "medium"
     });
 
-    const diagnosis = resp.content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
-      .join("\n")
-      .trim();
+    // Diagnosi tagliata a metà: non va salvata sopra quella precedente
+    if (stopReason === "max_tokens") {
+      return NextResponse.json({ ok: false, error: "La diagnosi è stata troncata. Riprova." }, { status: 502 });
+    }
+    if (!diagnosis) {
+      return NextResponse.json({ ok: false, error: "Claude non ha restituito una diagnosi. Riprova." }, { status: 502 });
+    }
 
     // Save to DB if requested
     if (body.saveToDb !== false) {
@@ -74,6 +76,9 @@ export async function POST(req: NextRequest) {
       diagnosedAt: new Date().toISOString()
     });
   } catch (err: any) {
+    if (err instanceof ClaudeRefusalError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 422 });
+    }
     console.error("[/api/adv/diagnose] error:", err);
     return NextResponse.json(
       { ok: false, error: err.message || "Internal error" },

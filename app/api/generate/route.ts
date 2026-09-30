@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, MODELS, buildEmailPrompt, buildHtmlPrompt, OM_LOGO_DARK } from "@/lib/anthropic";
+import {
+  runClaude,
+  parseJsonLoose,
+  ClaudeRefusalError,
+  buildStrategyPrompt,
+  buildHtmlPrompt,
+  STRATEGY_SCHEMA,
+  OM_LOGO_DARK,
+  OM_LOGO_WHITE
+} from "@/lib/anthropic";
 import type { Campaign, Product, TemplateStyle, ColorMode, StatementPosition } from "@/lib/anthropic";
+import { postProcessHtml } from "@/lib/html-postprocess";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,11 +25,59 @@ type GenerateRequest = {
   notes?: string;
   chosenSubject?: string;
   chosenPreview?: string;
+  chosenStatement?: string;
   strategy?: string;
   templateStyle?: TemplateStyle;
   colorMode?: ColorMode;
   statementPosition?: StatementPosition;
 };
+
+const MAX_PRODUCTS = 12;
+const TEMPLATES: TemplateStyle[] = ["classico", "minimal", "bold", "editorial", "statement"];
+const COLOR_MODES: ColorMode[] = ["light", "dark"];
+const POSITIONS: StatementPosition[] = ["top", "bottom", "both"];
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const strList = (v: unknown, maxItems: number, maxLen: number) =>
+  Array.isArray(v) ? v.map(x => str(x, maxLen)).filter(Boolean).slice(0, maxItems) : [];
+const oneOf = <T extends string>(v: unknown, allowed: T[], fallback: T): T =>
+  allowed.includes(v as T) ? (v as T) : fallback;
+
+function sanitizeProducts(raw: unknown): Product[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, MAX_PRODUCTS).map((p: any) => ({
+    id: str(p?.id, 120),
+    name: str(p?.name, 120),
+    price: num(p?.price),
+    category: str(p?.category, 30),
+    url: str(p?.url, 500),
+    img: str(p?.img, 1000),
+    isNew: !!p?.isNew,
+    features: strList(p?.features, 10, 60),
+    colors: strList(p?.colors, 12, 60),
+    details: str(p?.details, 200)
+  })).filter(p => p.name && /^https:\/\//.test(p.url) && /^https:\/\//.test(p.img));
+}
+
+function sanitizeCampaigns(raw: unknown, max: number): Campaign[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, max).map((c: any) => ({
+    name: str(c?.name, 200),
+    subject: str(c?.subject, 200),
+    sendDate: str(c?.sendDate, 20),
+    weekday: str(c?.weekday, 20),
+    type: str(c?.type, 30) || undefined,
+    recipients: num(c?.recipients),
+    opens: num(c?.opens),
+    openRate: num(c?.openRate),
+    clicks: num(c?.clicks),
+    clickRate: num(c?.clickRate),
+    orders: num(c?.orders),
+    revenue: num(c?.revenue),
+    unsubscribes: num(c?.unsubscribes)
+  }));
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,113 +99,131 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
   } catch (err: any) {
+    if (err instanceof ClaudeRefusalError) {
+      return NextResponse.json({ error: err.message }, { status: 422 });
+    }
     console.error("[generate] error:", err);
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
   }
 }
 
 async function generateStrategy(body: GenerateRequest) {
-  const topPerformers =
-    body.topPerformers ||
-    [...body.recentCampaigns]
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
+  const products = sanitizeProducts(body.selectedProducts);
+  if (products.length === 0) {
+    return NextResponse.json({ error: "Seleziona almeno un prodotto" }, { status: 400 });
+  }
 
-  const prompt = buildEmailPrompt({
-    emailType: body.emailType,
-    selectedProducts: body.selectedProducts,
-    recentCampaigns: body.recentCampaigns,
+  const templateStyle = oneOf(body.templateStyle, TEMPLATES, "classico");
+  const recentCampaigns = sanitizeCampaigns(body.recentCampaigns, 8);
+  const topPerformers = body.topPerformers
+    ? sanitizeCampaigns(body.topPerformers, 10)
+    : [...recentCampaigns].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+
+  const { system, user } = buildStrategyPrompt({
+    emailType: str(body.emailType, 60) || "Multi-Prodotto",
+    selectedProducts: products,
+    recentCampaigns,
     topPerformers,
-    focus: body.focus,
-    notes: body.notes,
-    templateStyle: body.templateStyle || "classico"
+    focus: str(body.focus, 1000),
+    notes: str(body.notes, 2000),
+    templateStyle
   });
 
-  const resp = await anthropic.messages.create({
-    model: MODELS.strategic,
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }]
+  const { text, stopReason } = await runClaude({
+    system,
+    content: user,
+    maxTokens: 8000,
+    effort: "medium",
+    jsonSchema: STRATEGY_SCHEMA
   });
 
-  const text = resp.content
-    .filter(b => b.type === "text")
-    .map(b => (b as any).text)
-    .join("\n")
-    .trim();
-
-  const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+  if (stopReason === "max_tokens") {
+    return NextResponse.json({ error: "La risposta di Claude è stata troncata. Riprova." }, { status: 502 });
+  }
 
   let parsed: any;
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = parseJsonLoose(text);
   } catch {
     return NextResponse.json(
-      { error: "Claude did not return valid JSON", raw: text },
+      { error: "Claude did not return valid JSON", raw: text.slice(0, 500) },
       { status: 502 }
     );
   }
 
-  return NextResponse.json({ ok: true, ...parsed });
+  const isStatement = templateStyle === "statement";
+  const subjects = (Array.isArray(parsed?.subjects) ? parsed.subjects : [])
+    .filter((s: any) => typeof s?.text === "string" && s.text.trim())
+    .map((s: any) => ({
+      text: s.text.trim(),
+      statement: isStatement ? String(s.statement || "").trim() : "",
+      preview: String(s.preview || "").trim(),
+      score: Number(s.score) || 0,
+      rationale: String(s.rationale || "").trim()
+    }));
+
+  if (subjects.length === 0) {
+    return NextResponse.json({ error: "Claude non ha proposto nessuna subject. Riprova." }, { status: 502 });
+  }
+
+  return NextResponse.json({ ok: true, subjects, strategy: parsed.strategy || {} });
 }
 
 async function generateHtml(body: GenerateRequest) {
-  if (!body.chosenSubject || !body.chosenPreview) {
+  const chosenSubject = str(body.chosenSubject, 200);
+  const chosenPreview = str(body.chosenPreview, 300);
+  if (!chosenSubject || !chosenPreview) {
     return NextResponse.json(
       { error: "chosenSubject and chosenPreview required for html mode" },
       { status: 400 }
     );
   }
 
-  const prompt = buildHtmlPrompt({
-    chosenSubject: body.chosenSubject,
-    chosenPreview: body.chosenPreview,
-    emailType: body.emailType,
-    selectedProducts: body.selectedProducts,
-    strategy: body.strategy || "",
-    templateStyle: body.templateStyle || "classico",
-    colorMode: body.colorMode || "light",
-    statementPosition: body.statementPosition || "top"
+  const products = sanitizeProducts(body.selectedProducts);
+  if (products.length === 0) {
+    return NextResponse.json({ error: "Seleziona almeno un prodotto" }, { status: 400 });
+  }
+
+  const templateStyle = oneOf(body.templateStyle, TEMPLATES, "classico");
+  const { system, user } = buildHtmlPrompt({
+    chosenSubject,
+    chosenPreview,
+    chosenStatement: str(body.chosenStatement, 120),
+    emailType: str(body.emailType, 60) || "Multi-Prodotto",
+    selectedProducts: products,
+    strategy: str(body.strategy, 2000),
+    templateStyle,
+    colorMode: oneOf(body.colorMode, COLOR_MODES, "light"),
+    statementPosition: oneOf(body.statementPosition, POSITIONS, "top")
   });
 
-  const resp = await anthropic.messages.create({
-    model: MODELS.strategic,
-    max_tokens: 12000,
-    messages: [{ role: "user", content: prompt }]
+  // Effort "low": strategia e copy sono già decisi allo step 2, qui conta restare
+  // sotto il limite di 300s di Vercel anche con molti prodotti.
+  const { text, stopReason } = await runClaude({
+    system,
+    cacheSystem: true,
+    content: user,
+    maxTokens: 32000,
+    effort: "low"
   });
 
-  let html = resp.content
-    .filter(b => b.type === "text")
-    .map(b => (b as any).text)
-    .join("\n")
-    .replace(/^```html\s*/i, "")
-    .replace(/```\s*$/, "")
-    .trim();
+  let html = text.replace(/^```html\s*/i, "").replace(/```\s*$/, "").trim();
+  // Taglia eventuale testo prima di <!DOCTYPE>/<html> o dopo </html>
+  const start = html.search(/<!DOCTYPE html|<html/i);
+  if (start > 0) html = html.slice(start);
+  const end = html.search(/<\/html>/i);
+  if (end !== -1) html = html.slice(0, end + "</html>".length);
 
-  // ── SOSTITUZIONE PLACEHOLDER → URL ESATTI ──
-  // Claude usa {{IMG_n}} / {{URL_n}} / {{LOGO}} invece di ricopiare gli URL
-  // (evita typo negli URL immagine, causa di immagini rotte). Qui li rimpiazziamo
-  // con i valori esatti dal catalog, byte per byte.
-  const LOGO_WHITE = "https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png";
-  const templateStyle = body.templateStyle || "classico";
-  const logoUrl = templateStyle === "statement" ? OM_LOGO_DARK : LOGO_WHITE;
+  // HTML incompleto = footer e disiscrizione persi: meglio un errore che un'email rotta.
+  if (stopReason === "max_tokens" || end === -1) {
+    return NextResponse.json(
+      { error: "L'HTML generato è incompleto (risposta troncata). Clicca \"Rigenera HTML\"." },
+      { status: 502 }
+    );
+  }
 
-  const escapeReg = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const replaceAll = (str: string, find: string, repl: string) =>
-    str.replace(new RegExp(escapeReg(find), "g"), repl);
+  const logoUrl = templateStyle === "statement" ? OM_LOGO_DARK : OM_LOGO_WHITE;
+  const { html: finalHtml, warnings } = postProcessHtml(html, products, logoUrl);
 
-  (body.selectedProducts || []).forEach((p, i) => {
-    html = replaceAll(html, `{{IMG_${i}}}`, p.img || "");
-    html = replaceAll(html, `{{URL_${i}}}`, p.url || "");
-  });
-  html = replaceAll(html, "{{LOGO}}", logoUrl);
-
-  // Sicurezza: se restano placeholder non sostituiti (es. Claude ne ha inventato uno
-  // in più), li puliamo verso il primo prodotto per non lasciare {{...}} nell'email.
-  const fallbackImg = body.selectedProducts?.[0]?.img || "";
-  const fallbackUrl = body.selectedProducts?.[0]?.url || "";
-  html = html.replace(/\{\{IMG_\d+\}\}/g, fallbackImg)
-             .replace(/\{\{URL_\d+\}\}/g, fallbackUrl)
-             .replace(/\{\{LOGO\}\}/g, logoUrl);
-
-  return NextResponse.json({ ok: true, html });
+  return NextResponse.json({ ok: true, html: finalHtml, warnings });
 }

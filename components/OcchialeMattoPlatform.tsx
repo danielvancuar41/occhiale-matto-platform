@@ -1,5 +1,5 @@
+// @ts-nocheck — legacy v2 component, incremental typing to follow (deve stare in riga 1 per avere effetto)
 "use client";
-// @ts-nocheck — legacy v2 component, incremental typing to follow
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
@@ -8,44 +8,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 // Full HTML Generator + Product Catalog + Analytics
 // All AI calls go through /api/generate (server-side, keys protected)
 // Live data: /api/catalog (Shopify scraper) + /api/klaviyo (campaigns)
+// Il catalogo viene SOLO da /api/catalog: niente lista di riserva scritta a mano
+// (quella vecchia aveva URL immagine inesistenti → email con immagini rotte).
 // ═══════════════════════════════════════════════════════════════════
-
-// ── PRODUCT CATALOG (fallback if scraper fails — manually synced) ──
-const PRODUCTS = [
-  { id:"destino", name:"Destino", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/destino", img:"https://occhialematto.com/cdn/shop/files/destino_hero.jpg" },
-  { id:"destino-xl", name:"Destino XL", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/destino-xl", img:"https://occhialematto.com/cdn/shop/files/destino_xl_hero.jpg" },
-  { id:"banlieue", name:"Banlieue", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/banlieue", img:"https://occhialematto.com/cdn/shop/files/banlieue_hero.jpg" },
-  { id:"favela", name:"Favela", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/favela", img:"https://occhialematto.com/cdn/shop/files/favela_hero.jpg" },
-  { id:"pigalle", name:"Pigalle", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/pigalle", img:"https://occhialematto.com/cdn/shop/files/pigalle_hero.jpg" },
-  { id:"de-niro", name:"De Niro", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/de-niro", img:"https://occhialematto.com/cdn/shop/files/de_niro_hero.jpg" },
-  { id:"ghepard-goccia", name:"Ghepard Goccia", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/ghepard-goccia", img:"https://occhialematto.com/cdn/shop/files/ghepard_goccia_hero.jpg" },
-  { id:"ghepard-rett", name:"Ghepard Rettangolare", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/ghepard-rettangolare", img:"https://occhialematto.com/cdn/shop/files/ghepard_rett_hero.jpg" },
-  { id:"quebec", name:"Quebec", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/quebec", img:"https://occhialematto.com/cdn/shop/files/quebec_hero.jpg" },
-  { id:"prime", name:"Prime", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/prime", img:"https://occhialematto.com/cdn/shop/files/prime_hero.jpg" },
-  { id:"mini-santos", name:"Mini Santos", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/mini-santos", img:"https://occhialematto.com/cdn/shop/files/mini_santos_hero.jpg" },
-  { id:"elite", name:"Elitè", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/elite", img:"https://occhialematto.com/cdn/shop/files/elite_hero.jpg" },
-  { id:"c-smoke", name:"C Smoke", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/c-smoke", img:"https://occhialematto.com/cdn/shop/files/c_smoke_hero.jpg" },
-  { id:"figueretas", name:"Figueretas", price:29.99, category:"uomo", icon:true, url:"https://occhialematto.com/products/figueretas", img:"https://occhialematto.com/cdn/shop/files/figueretas_hero.jpg" },
-  { id:"oni-one", name:"ONI ONE", price:59.99, category:"premium", url:"https://occhialematto.com/products/oni-one", img:"https://occhialematto.com/cdn/shop/files/oni_one_hero.jpg" },
-  { id:"blood-money", name:"Blood Money Empire", price:59.99, category:"premium", url:"https://occhialematto.com/products/blood-money-empire", img:"https://occhialematto.com/cdn/shop/files/blood_money_hero.jpg" },
-  { id:"elite-xl", name:"Élite XL", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/elite-xl", img:"https://occhialematto.com/cdn/shop/files/elite_xl_hero.jpg", new:true },
-  { id:"hype-vintage", name:"Hype Vintage", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/hype-vintage", img:"https://occhialematto.com/cdn/shop/files/hype_vintage_hero.jpg", new:true, foto:true },
-  { id:"hype-exagon", name:"Hype Exagon", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/hype-exagon", img:"https://occhialematto.com/cdn/shop/files/hype_exagon_hero.jpg", new:true },
-  { id:"hype-bogota", name:"Hype Bogotà", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/hype-bogota", img:"https://occhialematto.com/cdn/shop/files/hype_bogota_hero.jpg", new:true },
-  { id:"murphy", name:"Murphy", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/murphy", img:"https://occhialematto.com/cdn/shop/files/murphy_hero.jpg", new:true },
-  { id:"sidney", name:"Sidney", price:49.99, category:"novita2026", url:"https://occhialematto.com/products/sidney", img:"https://occhialematto.com/cdn/shop/files/sidney_hero.jpg", new:true },
-  { id:"cubic", name:"Cubic", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/cubic", img:"https://occhialematto.com/cdn/shop/files/cubic_hero.jpg", new:true },
-  { id:"pacha", name:"Pacha", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/pacha", img:"https://occhialematto.com/cdn/shop/files/pacha_hero.jpg", new:true },
-  { id:"rivoli", name:"Rivoli", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/rivoli", img:"https://occhialematto.com/cdn/shop/files/rivoli_hero.jpg", new:true },
-  { id:"cardie", name:"Cardie", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/cardie", img:"https://occhialematto.com/cdn/shop/files/cardie_hero.jpg", new:true },
-  { id:"novis", name:"Novis", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/novis", img:"https://occhialematto.com/cdn/shop/files/novis_hero.jpg", new:true },
-  { id:"naos", name:"Naos", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/naos", img:"https://occhialematto.com/cdn/shop/files/naos_hero.jpg", new:true },
-  { id:"urban-life", name:"Urban Life", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/urban-life", img:"https://occhialematto.com/cdn/shop/files/urban_life_hero.jpg", new:true },
-  { id:"black-kaws", name:"Black Kaws", price:29.99, category:"novita2026", url:"https://occhialematto.com/products/black-kaws", img:"https://occhialematto.com/cdn/shop/files/black_kaws_hero.jpg", new:true },
-  { id:"bamby-acetato", name:"Bamby Acetato", price:34.99, category:"novita2026", url:"https://occhialematto.com/products/bamby-acetato", img:"https://occhialematto.com/cdn/shop/files/bamby_acetato_hero.jpg", new:true },
-];
-
-const FOTO_MODELS = ["prime","ghepard-goccia","ghepard-rett","elite","c-smoke","quebec","pigalle","banlieue","hype-vintage"];
 
 // ── CAMPAIGN DATA (FALLBACK ONLY — Klaviyo overrides this when available) ──
 const CAMPAIGNS_FALLBACK = [
@@ -115,6 +80,46 @@ const fmtPct = n => n?.toFixed?.(1) ?? "0.0";
 // localStorage cache key for Klaviyo data
 const KLAVIYO_CACHE_KEY = "om_klaviyo_campaigns_v1";
 const KLAVIYO_CACHE_AT_KEY = "om_klaviyo_fetched_at_v1";
+
+// Storico delle email generate (solo in questo browser)
+const HISTORY_KEY = "om_email_history_v1";
+const MAX_HISTORY = 10;
+
+// Prodotto nel formato atteso da /api/generate
+const toApiProduct = p => ({
+  id: p.id, name: p.name, price: p.price, category: p.category || "", url: p.url, img: p.img,
+  isNew: !!p.new, features: p.features || [], colors: p.colors || [], details: p.details || ""
+});
+
+// Campagna nel formato atteso da /api/generate
+const toApiCampaign = c => ({
+  name: c.name || c.subject || "",
+  subject: c.subject || "",
+  sendDate: c.date || "",
+  weekday: c.date ? new Date(c.date).toLocaleDateString("it-IT", { weekday: "long" }) : "",
+  type: TYPE_LABELS[c.type] || c.type || "",
+  recipients: c.recipients || 0,
+  opens: c.opens || 0,
+  openRate: c.or || 0,
+  clicks: c.clicks || 0,
+  clickRate: c.cr || 0,
+  orders: c.orders || 0,
+  revenue: c.rev || 0,
+  unsubscribes: c.unsub || 0
+});
+
+const isPhotochromicProduct = p => (p.features || []).some(f => /fotocromat/i.test(f));
+
+function formatDateTime(iso) {
+  try {
+    return new Date(iso).toLocaleString("it-IT", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+  } catch { return ""; }
+}
+
+// Risposta non JSON dal server: il caso tipico è il timeout di Vercel (504) dopo 5 minuti
+const unexpectedResponse = (status, text) => status === 504
+  ? "Claude ci ha messo più di 5 minuti (limite del server). Riprova, magari con meno prodotti."
+  : `Il server ha risposto in modo inatteso (${status}): ${text.slice(0,120)}`;
 
 // ── ICONS ──
 const I = {
@@ -275,6 +280,12 @@ function formatAgo(iso?: string): string {
 }
 
 // ── ADV HELPERS ──
+// Data locale YYYY-MM-DD (toISOString usa l'ora UTC e di notte sposta il giorno)
+function toLocalISODate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function emptyAdvForm() {
   const now = new Date();
   const lastMonday = new Date(now);
@@ -284,8 +295,8 @@ function emptyAdvForm() {
   return {
     week_number: "",
     week_label: "",
-    week_start: lastMonday.toISOString().slice(0, 10),
-    week_end: lastSunday.toISOString().slice(0, 10),
+    week_start: toLocalISODate(lastMonday),
+    week_end: toLocalISODate(lastSunday),
     notes: "",
     acq_spesa: "", acq_impression: "", acq_click: "", acq_acquisti: "", acq_revenue: "",
     ret_spesa: "", ret_impression: "", ret_click: "", ret_acquisti: "", ret_revenue: "",
@@ -350,12 +361,25 @@ export default function App() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [liveProducts, setLiveProducts] = useState(null); // null = not loaded yet, array = loaded
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilter, setProductFilter] = useState("all"); // all | new | foto
+
+  // Generatore: esito, avvisi, email corrente, storico
+  const [htmlError, setHtmlError] = useState(null);
+  const [htmlWarnings, setHtmlWarnings] = useState([]);
+  const [currentEmail, setCurrentEmail] = useState(null); // { subject, preview, statement }
+  const [genElapsed, setGenElapsed] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [copiedField, setCopiedField] = useState(null); // "subject" | "preview"
+  const [coverCopied, setCoverCopied] = useState(false);
 
   // Klaviyo state
   const [liveCampaigns, setLiveCampaigns] = useState<any[] | null>(null);
   const [klaviyoLoading, setKlaviyoLoading] = useState(false);
   const [klaviyoError, setKlaviyoError] = useState<string | null>(null);
   const [klaviyoFetchedAt, setKlaviyoFetchedAt] = useState<string | null>(null);
+  const [klaviyoWarning, setKlaviyoWarning] = useState<string | null>(null);
 
   // ── ADV (Meta Ads weekly reports) ──
   const [advWeeks, setAdvWeeks] = useState<any[] | null>(null); // null = not loaded
@@ -381,22 +405,67 @@ export default function App() {
 
   const htmlRef = useRef(null);
 
-  // ── Fetch live catalog from occhialematto.com on mount ──
-  useEffect(() => {
-    let cancelled = false;
+  // ── Fetch live catalog from occhialematto.com (on mount + "Riprova") ──
+  const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
-    fetch("/api/catalog")
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return;
-        if (data.ok && Array.isArray(data.products)) {
-          setLiveProducts(data.products);
-        }
-      })
-      .catch(err => console.error("[catalog] fetch failed", err))
-      .finally(() => { if (!cancelled) setCatalogLoading(false); });
-    return () => { cancelled = true; };
+    setCatalogError(null);
+    try {
+      const res = await fetch("/api/catalog", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.ok || !Array.isArray(data.products)) throw new Error(data.error || `HTTP ${res.status}`);
+      setLiveProducts(data.products);
+    } catch (err: any) {
+      console.error("[catalog] fetch failed", err);
+      setCatalogError(err.message || "Catalogo non disponibile");
+    } finally {
+      setCatalogLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadCatalog(); }, [loadCatalog]);
+
+  // ── Storico email generate (localStorage di questo browser) ──
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) setHistory(arr);
+    } catch { /* storage non disponibile: lo storico resta vuoto */ }
+  }, []);
+
+  const persistHistory = (list) => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+    } catch {
+      // storage pieno: tieni solo le ultime 3
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 3))); } catch { /* ignore */ }
+    }
+  };
+
+  const saveToHistory = useCallback((entry) => {
+    setHistory(prev => {
+      const next = [entry, ...prev].slice(0, MAX_HISTORY);
+      persistHistory(next);
+      return next;
+    });
+  }, []);
+
+  const deleteFromHistory = useCallback((id) => {
+    setHistory(prev => {
+      const next = prev.filter(h => h.id !== id);
+      persistHistory(next);
+      return next;
+    });
+  }, []);
+
+  // ── Contatore secondi durante le generazioni (strategia e HTML) ──
+  useEffect(() => {
+    if (step !== 1 && htmlStep !== 1) return;
+    setGenElapsed(0);
+    const t0 = Date.now();
+    const id = setInterval(() => setGenElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [step, htmlStep]);
 
   // ── Load Klaviyo campaigns: try cache first, then fetch fresh in background ──
   useEffect(() => {
@@ -431,6 +500,14 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Klaviyo ${res.status}`);
       if (!Array.isArray(data.campaigns)) throw new Error("Risposta inattesa da Klaviyo");
+
+      setKlaviyoWarning(data.statsError || null);
+      if (!data.hasStats) {
+        // Campagne arrivate senza statistiche (es. rate limit Klaviyo): NON sovrascrivere
+        // i dati buoni già in cache con campagne tutte a zero.
+        if (!data.statsError) setKlaviyoWarning("Klaviyo non ha restituito le statistiche delle campagne.");
+        return;
+      }
 
       // Klaviyo returns most-recent first; reverse to oldest-first like CAMPAIGNS_FALLBACK
       const sorted = [...data.campaigns].sort((a, b) =>
@@ -583,6 +660,11 @@ export default function App() {
       setAdvExtractError("Seleziona un'immagine prima");
       return;
     }
+    // Vercel accetta richieste fino a ~4,5 MB e il base64 pesa ~1/3 in più del file
+    if (advExtractMode === "image" && advExtractFile && advExtractFile.size > 3 * 1024 * 1024) {
+      setAdvExtractError("Immagine troppo pesante (max 3 MB): ritaglia lo screenshot o salvalo in JPG");
+      return;
+    }
     if (advExtractMode === "text" && !advExtractText.trim()) {
       setAdvExtractError("Incolla il testo del report prima");
       return;
@@ -658,8 +740,8 @@ export default function App() {
     setAdvExtractText("");
   }, [advExtracted, advForm]);
 
-  // Use live products if available, fallback to hardcoded
-  const ACTIVE_PRODUCTS = liveProducts && liveProducts.length > 0 ? liveProducts : PRODUCTS;
+  // Catalogo live da occhialematto.com (vuoto finché non arriva o se non è raggiungibile)
+  const ACTIVE_PRODUCTS = liveProducts || [];
 
   // Use live campaigns if available, fallback to hardcoded
   const CAMPAIGNS = liveCampaigns && liveCampaigns.length > 0 ? liveCampaigns : CAMPAIGNS_FALLBACK;
@@ -700,6 +782,7 @@ export default function App() {
     });
     return Object.entries(tp).map(([k,v]:any)=>({type:k,...v,avgRev:v.rev/v.n,avgCr:v.crS/v.n})).sort((a,b)=>b.avgRev-a.avgRev);
   }, [CAMPAIGNS]);
+  const maxTypeRev = Math.max(...typePerf.map(t => t.avgRev), 1);
 
   const suggestedType = useMemo(() => {
     const recent = CAMPAIGNS.slice(-3).map(c=>c.type);
@@ -715,15 +798,38 @@ export default function App() {
     setConfig(p => ({...p, products: p.products.includes(id) ? p.products.filter(x=>x!==id) : [...p.products, id]}));
   };
 
+  const selectedProducts = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+  const isStatementTemplate = config.templateStyle === "statement";
+
+  // Prodotti visibili nel selettore (ricerca + filtro)
+  const pickerProducts = ACTIVE_PRODUCTS.filter(p => {
+    if (productFilter === "new" && !p.new) return false;
+    if (productFilter === "foto" && !isPhotochromicProduct(p)) return false;
+    const q = productSearch.trim().toLowerCase();
+    return !q || p.name.toLowerCase().includes(q);
+  });
+
   // ── GENERATE STRATEGY (Step 1 → 2) ──
   const generateStrategy = useCallback(async () => {
-    setStep(1);
-    const last8 = CAMPAIGNS.slice(-8);
-    const bestCR = [...CAMPAIGNS].sort((a,b)=>(b.cr||0)-(a.cr||0)).slice(0,8);
-    const bestRev = [...CAMPAIGNS].sort((a,b)=>(b.rev||0)-(a.rev||0)).slice(0,5);
-    const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+    const allSelected = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+    // Il template Statement usa un solo prodotto: il primo selezionato
+    const selectedProds = config.templateStyle === "statement" ? allSelected.slice(0, 1) : allSelected;
+    if (selectedProds.length === 0) return;
 
-    const typeLabel = TYPE_LABELS[config.type] || config.type;
+    setStep(1);
+    setResult(null);
+    setSelectedSubject(null);
+
+    // Ultime 8, dalla più recente
+    const recent = CAMPAIGNS.slice(-8).reverse();
+    // Migliori per revenue ogni 1000 destinatari (le liste hanno dimensioni diverse);
+    // senza destinatari (dati di backup) si usa la revenue assoluta
+    const perRecipient = c => (c.recipients > 0 ? (c.rev || 0) / c.recipients : null);
+    const withRecipients = CAMPAIGNS.filter(c => perRecipient(c) !== null);
+    const best = (withRecipients.length >= 5
+      ? [...withRecipients].sort((a, b) => perRecipient(b) - perRecipient(a))
+      : [...CAMPAIGNS].sort((a, b) => (b.rev || 0) - (a.rev || 0))
+    ).slice(0, 5);
 
     try {
       const res = await fetch("/api/generate", {
@@ -731,63 +837,41 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "strategy",
-          emailType: typeLabel,
-          selectedProducts: selectedProds,
-          recentCampaigns: last8.map(c => ({
-            name: c.subject || "",
-            subject: c.subject || "",
-            sendDate: c.date || "",
-            weekday: c.date ? new Date(c.date).toLocaleDateString("en-US", { weekday: "long" }) : "",
-            recipients: c.recipients || 0,
-            opens: c.opens || 0,
-            openRate: c.or || 0,
-            clicks: c.clicks || 0,
-            clickRate: c.cr || 0,
-            orders: c.orders || 0,
-            revenue: c.rev || 0,
-            unsubscribes: c.unsub || 0
-          })),
-          topPerformers: bestRev.map(c => ({
-            name: c.subject || "",
-            subject: c.subject || "",
-            sendDate: c.date || "",
-            weekday: "",
-            recipients: 0,
-            opens: 0,
-            openRate: c.or || 0,
-            clicks: 0,
-            clickRate: c.cr || 0,
-            orders: c.orders || 0,
-            revenue: c.rev || 0,
-            unsubscribes: c.unsub || 0
-          })),
+          emailType: TYPE_LABELS[config.type] || config.type,
+          templateStyle: config.templateStyle || "classico",
+          selectedProducts: selectedProds.map(toApiProduct),
+          recentCampaigns: recent.map(toApiCampaign),
+          topPerformers: best.map(toApiCampaign),
           focus: config.focus,
           notes: config.notes
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(unexpectedResponse(res.status, text));
+      }
+      if (!res.ok) throw new Error(data.error || "Generazione non riuscita");
 
-      // Normalize server response to match the legacy UI shape
-      const normalized = {
+      setResult({
         recommendation: data.strategy?.hook || "Strategia generata in base ai pattern vincenti",
         subjects: (data.subjects || []).map((s: any) => ({
           subject: s.text,
+          statement: s.statement || "",
           preview: s.preview,
           rationale: s.rationale,
           score: s.score
         })),
         email_structure: data.strategy?.emailStructure || "",
-        products_suggestion: "",
-        headline: (data.subjects?.[0]?.text || "").toUpperCase(),
-        subheadline: data.strategy?.hook || "",
-        best_day: data.strategy?.recommendedDay || "Thursday",
-        warnings: data.strategy?.warnings || []
-      };
-      setResult(normalized);
+        best_day: data.strategy?.recommendedDay || "",
+        warnings: data.strategy?.warnings || [],
+        templateStyle: config.templateStyle
+      });
       setStep(2);
     } catch(e: any) {
-      setResult({ recommendation:`Errore: ${e.message}`, subjects:[], warnings:[e.message] });
+      setResult({ error: e.message || "Errore sconosciuto", subjects: [], warnings: [] });
       setStep(2);
     }
   }, [config, CAMPAIGNS, ACTIVE_PRODUCTS]);
@@ -795,18 +879,26 @@ export default function App() {
   // ── GENERATE HTML (Step 2 → 3) ──
   const generateHtml = useCallback(async (overrideIndex?: number) => {
     const idx = typeof overrideIndex === "number" ? overrideIndex : selectedSubject;
-    if (idx === null || idx === undefined || !result) return;
-    if (!result.subjects || !result.subjects[idx]) return;
+    if (idx === null || idx === undefined || !result?.subjects?.[idx]) return;
+    const allSelected = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
+    const selectedProds = config.templateStyle === "statement" ? allSelected.slice(0, 1) : allSelected;
+    if (selectedProds.length === 0) return;
 
-    if (idx !== selectedSubject) setSelectedSubject(idx);
+    setSelectedSubject(idx);
     setHtmlStep(1);
+    setHtmlError(null);
+    setHtmlWarnings([]);
 
     const subj = result.subjects[idx];
-    const selectedProds = config.products.map(id => ACTIVE_PRODUCTS.find(p=>p.id===id)).filter(Boolean);
-    const prodsToUse = selectedProds.length > 0 ? selectedProds : ACTIVE_PRODUCTS.slice(0,6);
+    const statement = config.templateStyle === "statement"
+      ? (statementOverride.trim() || subj.statement || subj.subject)
+      : "";
+    const email = { subject: subj.subject, preview: subj.preview, statement };
+    setCurrentEmail(email);
 
+    // Il server ha 300s (maxDuration): il client aspetta un po' di più per ricevere il suo errore
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 240000);
+    const timeoutId = setTimeout(() => controller.abort(), 310000);
 
     try {
       const res = await fetch("/api/generate", {
@@ -816,55 +908,89 @@ export default function App() {
         body: JSON.stringify({
           mode: "html",
           emailType: TYPE_LABELS[config.type] || config.type,
-          chosenSubject: (config.templateStyle === "statement" && statementOverride.trim())
-            ? statementOverride.trim()
-            : subj.subject,
+          chosenSubject: subj.subject,
           chosenPreview: subj.preview,
+          chosenStatement: statement,
           strategy: result.email_structure || result.recommendation || "",
           templateStyle: config.templateStyle || "classico",
           colorMode: config.colorMode || "light",
           statementPosition: config.statementPosition || "top",
-          selectedProducts: prodsToUse.map(p => ({
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            category: p.category,
-            url: p.url,
-            img: p.img,
-            isNew: !!p.new
-          })),
+          selectedProducts: selectedProds.map(toApiProduct),
           recentCampaigns: []
         })
       });
-      clearTimeout(timeoutId);
 
       const text = await res.text();
       let data: any;
       try {
         data = JSON.parse(text);
       } catch {
-        throw new Error(`Server returned non-JSON response (${res.status}): ${text.slice(0,120)}`);
+        throw new Error(unexpectedResponse(res.status, text));
       }
 
-      if (!res.ok) throw new Error(data.error || `HTML generation failed (${res.status})`);
-      if (!data.html) throw new Error("Response OK but no HTML returned");
+      if (!res.ok) throw new Error(data.error || `Generazione HTML non riuscita (${res.status})`);
+      if (!data.html) throw new Error("Risposta senza HTML");
 
       setHtmlOutput(data.html);
-      setHtmlStep(2);
+      setHtmlWarnings(data.warnings || []);
+      saveToHistory({
+        id: String(Date.now()),
+        createdAt: new Date().toISOString(),
+        ...email,
+        type: config.type,
+        templateStyle: config.templateStyle,
+        colorMode: config.colorMode,
+        products: selectedProds.map(p => p.name),
+        html: data.html,
+        warnings: data.warnings || []
+      });
     } catch(e: any) {
+      setHtmlOutput("");
+      setHtmlError(e.name === "AbortError"
+        ? "Timeout: la generazione ha superato i 5 minuti. Riprova."
+        : e.message || "Errore sconosciuto");
+    } finally {
       clearTimeout(timeoutId);
-      const msg = e.name === "AbortError"
-        ? "Timeout: la generazione ha superato i 4 minuti. Riprova."
-        : e.message || "Errore sconosciuto";
-      setHtmlOutput(`<!-- Errore: ${msg} -->\n<div style="padding:40px;font-family:monospace;color:#d64545;background:#faf7f2;">\n<h3>Errore durante la generazione</h3>\n<p>${msg}</p>\n<p style="color:#5a5a5a;font-size:12px;">Clicca "Rigenera HTML" per riprovare.</p>\n</div>`);
       setHtmlStep(2);
     }
-  }, [selectedSubject, result, config, ACTIVE_PRODUCTS]);
+  }, [selectedSubject, result, config, ACTIVE_PRODUCTS, statementOverride, saveToHistory]);
+
+  // Riapre un'email dallo storico (solo visualizzazione/copia: la strategia non c'è più)
+  const openFromHistory = (h) => {
+    setResult(null);
+    setSelectedSubject(null);
+    setStep(2);
+    setCurrentEmail({ subject: h.subject, preview: h.preview, statement: h.statement || "" });
+    setHtmlOutput(h.html);
+    setHtmlWarnings(h.warnings || []);
+    setHtmlError(null);
+    setHtmlStep(2);
+    setViewMode("preview");
+  };
+
+  const resetGenerator = () => {
+    setStep(0);
+    setResult(null);
+    setHtmlStep(0);
+    setHtmlOutput("");
+    setHtmlError(null);
+    setHtmlWarnings([]);
+    setCurrentEmail(null);
+    setSelectedSubject(null);
+  };
 
   const copyHtml = () => {
+    if (!htmlOutput) return;
     navigator.clipboard?.writeText(htmlOutput);
     setCopied(true);
     setTimeout(()=>setCopied(false), 2000);
+  };
+
+  const copyField = (field, value) => {
+    if (!value) return;
+    navigator.clipboard?.writeText(value);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 1500);
   };
 
   // ── Styles ──
@@ -910,13 +1036,14 @@ export default function App() {
               {klaviyoLoading ? "Aggiornamento..." : (klaviyoError ? "Riprova" : "Aggiorna")}
             </button>
             <div style={{ fontSize:"9px", color:"#5a5a5a", padding:"4px 10px", border:"1px solid #e8ddd0", borderRadius:"5px" }}>
-              {CAMPAIGNS.length} campagne{usingLiveCampaigns ? " live" : ""} · {ACTIVE_PRODUCTS.length} prodotti{liveProducts ? " live" : ""}
+              {CAMPAIGNS.length} campagne{usingLiveCampaigns ? " live" : ""} · {catalogError ? <span style={{ color:"#d64545" }}>catalogo non disponibile</span> : catalogLoading && !liveProducts ? "catalogo..." : `${ACTIVE_PRODUCTS.length} prodotti live`}
             </div>
           </div>
         </div>
         <div style={{ display:"flex", maxWidth:"1100px", margin:"0 auto" }}>
           <button style={S.tab(tab==="dashboard")} onClick={()=>setTab("dashboard")}>{I.dash} Dashboard</button>
-          <button style={S.tab(tab==="generator")} onClick={()=>{setTab("generator");setStep(0);setResult(null);setHtmlStep(0);setHtmlOutput("");setSelectedSubject(null);}}>{I.spark} Generatore</button>
+          {/* Cambiare tab non cancella più il lavoro nel generatore: per ricominciare c'è "Nuova email" */}
+          <button style={S.tab(tab==="generator")} onClick={()=>setTab("generator")}>{I.spark} Generatore</button>
           <button style={S.tab(tab==="campaigns")} onClick={()=>setTab("campaigns")}>{I.list} Campagne</button>
           <button style={S.tab(tab==="adv")} onClick={()=>setTab("adv")}>📊 ADV</button>
           <button style={S.tab(tab==="cover")} onClick={()=>setTab("cover")}>🖼️ Cover</button>
@@ -931,6 +1058,18 @@ export default function App() {
             <span style={{ color:"#5a5a5a", flex:1 }}>
               Klaviyo non risponde. Mostro {usingLiveCampaigns ? "ultima cache disponibile" : "dati storici di backup"}.
               <span style={{ color:"#9a9089", marginLeft:"6px" }}>({klaviyoError})</span>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Klaviyo risponde ma senza statistiche aggiornate (es. rate limit) */}
+      {!klaviyoError && klaviyoWarning && (
+        <div style={{ maxWidth:"1100px", margin:"10px auto 0", padding:"0 20px" }}>
+          <div style={{ background:"#b8924a0f", border:"1px solid #b8924a33", borderRadius:"7px", padding:"8px 14px", display:"flex", alignItems:"center", gap:"8px", fontSize:"11px" }}>
+            <span style={{ color:"#b8924a" }}>{I.alert}</span>
+            <span style={{ color:"#5a5a5a", flex:1 }}>
+              Statistiche Klaviyo non aggiornate: {klaviyoWarning}
             </span>
           </div>
         </div>
@@ -956,7 +1095,7 @@ export default function App() {
             </div>
           )}
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"14px" }}>
+          <div className="om-grid-2" style={{ marginBottom:"14px" }}>
             <div style={S.sec}>
               <div style={S.secTitle}>Revenue mensile</div>
               <div style={{ display:"flex", alignItems:"flex-end", gap:"6px", height:"120px" }}>
@@ -978,7 +1117,7 @@ export default function App() {
                   <div key={t.type} style={{ display:"flex", alignItems:"center", gap:"8px" }}>
                     <span style={{ width:"60px", fontSize:"9px", color:TYPE_COLORS[t.type]||"#5a5a5a", fontWeight:700, textTransform:"uppercase" }}>{TYPE_LABELS[t.type]?.slice(0,8) || t.type}</span>
                     <div style={{ flex:1, height:"16px", background:"#e8ddd0", borderRadius:"3px", overflow:"hidden" }}>
-                      <div style={{ height:"100%", width:`${Math.min((t.avgRev/400)*100, 100)}%`, background:TYPE_COLORS[t.type]||"#b8924a", borderRadius:"3px" }}/>
+                      <div style={{ height:"100%", width:`${(t.avgRev/maxTypeRev)*100}%`, background:TYPE_COLORS[t.type]||"#b8924a", borderRadius:"3px" }}/>
                     </div>
                     <span style={{ fontSize:"11px", color:"#2a2a2a", fontFamily:"'Space Mono',monospace", width:"50px", textAlign:"right" }}>€{Math.round(t.avgRev)}</span>
                   </div>
@@ -1142,28 +1281,56 @@ export default function App() {
               <div style={{ marginBottom:"14px" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"6px" }}>
                   <label style={{ fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Prodotti ({config.products.length} selezionati)</label>
-                  <button onClick={()=>setShowProductPicker(!showProductPicker)} style={{ ...S.btn(showProductPicker), fontSize:"10px", padding:"4px 10px", display:"flex", alignItems:"center", gap:"4px" }}>
+                  <button onClick={()=>setShowProductPicker(!showProductPicker)} disabled={!liveProducts} style={{ ...S.btn(showProductPicker), fontSize:"10px", padding:"4px 10px", display:"flex", alignItems:"center", gap:"4px", opacity: liveProducts ? 1 : 0.5 }}>
                     {showProductPicker ? <>{I.x} Chiudi</> : <>{I.plus} Scegli prodotti</>}
                   </button>
                 </div>
-                
-                {showProductPicker && (
-                  <div style={{ background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"8px", padding:"12px", maxHeight:"200px", overflowY:"auto" }}>
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:"4px" }}>
-                      {ACTIVE_PRODUCTS.map(p => {
-                        const sel = config.products.includes(p.id);
-                        return (
-                          <button key={p.id} onClick={()=>toggleProduct(p.id)} style={{
-                            padding:"6px 8px", borderRadius:"5px", fontSize:"10px", textAlign:"left",
-                            background:sel?"#b8924a15":"transparent", border:`1px solid ${sel?"#b8924a44":"#e8ddd0"}`,
-                            color:sel?"#b8924a":"#7a7a7a", cursor:"pointer", fontFamily:"inherit",
-                            display:"flex", justifyContent:"space-between", alignItems:"center", transition:"all 0.1s"
-                          }}>
-                            <span>{p.name}{p.new?" ✦":""}</span>
-                            <span style={{ fontSize:"9px", color:"#9a9089" }}>€{p.price}</span>
-                          </button>
-                        );
-                      })}
+
+                {catalogLoading && !liveProducts && (
+                  <div style={{ fontSize:"11px", color:"#9a9089", padding:"6px 0" }}>Caricamento catalogo da occhialematto.com...</div>
+                )}
+                {catalogError && (
+                  <div style={{ fontSize:"11px", color:"#d64545", background:"#d645450a", border:"1px solid #d6454522", borderRadius:"6px", padding:"8px 12px", display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px" }}>
+                    <span style={{ flex:1 }}>Catalogo non disponibile ({catalogError}). Senza catalogo non si possono generare email con foto e link corretti.</span>
+                    <button onClick={loadCatalog} disabled={catalogLoading} style={{ ...S.btn(false), fontSize:"10px", padding:"4px 10px" }}>{catalogLoading ? "..." : "Riprova"}</button>
+                  </div>
+                )}
+
+                {showProductPicker && liveProducts && (
+                  <div style={{ background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"8px", padding:"12px" }}>
+                    <div style={{ display:"flex", gap:"6px", marginBottom:"8px", flexWrap:"wrap" }}>
+                      <input
+                        type="text"
+                        value={productSearch}
+                        onChange={e=>setProductSearch(e.target.value)}
+                        placeholder="Cerca modello..."
+                        style={{ ...S.input, flex:"1 1 160px", width:"auto" }}
+                      />
+                      {[["all","Tutti"],["new","Novità ✦"],["foto","Fotocromatici"]].map(([id,label]) => (
+                        <button key={id} onClick={()=>setProductFilter(id)} style={{ ...S.btn(productFilter===id), fontSize:"10px" }}>{label}</button>
+                      ))}
+                    </div>
+                    <div style={{ maxHeight:"260px", overflowY:"auto" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:"4px" }}>
+                        {pickerProducts.map(p => {
+                          const sel = config.products.includes(p.id);
+                          return (
+                            <button key={p.id} onClick={()=>toggleProduct(p.id)} title={[p.name, p.category, ...(p.features || [])].filter(Boolean).join(" · ")} style={{
+                              padding:"4px 8px 4px 4px", borderRadius:"5px", fontSize:"10px", textAlign:"left",
+                              background:sel?"#b8924a15":"#ffffff", border:`1px solid ${sel?"#b8924a88":"#e8ddd0"}`,
+                              color:sel?"#b8924a":"#5a5a5a", cursor:"pointer", fontFamily:"inherit",
+                              display:"flex", alignItems:"center", gap:"6px", transition:"all 0.1s"
+                            }}>
+                              <img src={p.img} alt="" loading="lazy" width={30} height={30} style={{ width:"30px", height:"30px", objectFit:"contain", flexShrink:0 }}/>
+                              <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight: sel ? 700 : 500 }}>{p.name}{p.new?" ✦":""}</span>
+                              <span style={{ fontSize:"9px", color:"#9a9089" }}>€{Number(p.price).toFixed(2).replace(".", ",")}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {pickerProducts.length === 0 && (
+                        <div style={{ fontSize:"11px", color:"#9a9089", padding:"10px 4px" }}>Nessun prodotto trovato.</div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1180,6 +1347,12 @@ export default function App() {
                     })}
                   </div>
                 )}
+
+                {isStatementTemplate && selectedProducts.length > 1 && (
+                  <div style={{ fontSize:"10px", color:"#b8924a", marginTop:"6px" }}>
+                    Il template Statement usa un solo prodotto: verrà usato <b>{selectedProducts[0].name}</b> (il primo selezionato).
+                  </div>
+                )}
               </div>
 
               {/* Focus & Notes */}
@@ -1194,8 +1367,35 @@ export default function App() {
                   style={{ width:"100%", padding:"9px 12px", background:"#f5f1ea", border:"1px solid #e8ddd0", borderRadius:"7px", color:"#1a1a1a", fontSize:"12px", fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }}/>
               </div>
 
-              <button onClick={generateStrategy} style={S.goldBtn}>{I.spark} GENERA STRATEGIA + SUBJECT</button>
+              <div style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+                <button onClick={generateStrategy} disabled={selectedProducts.length === 0} style={{ ...S.goldBtn, opacity: selectedProducts.length === 0 ? 0.45 : 1, cursor: selectedProducts.length === 0 ? "not-allowed" : "pointer" }}>{I.spark} GENERA STRATEGIA + SUBJECT</button>
+                {selectedProducts.length === 0 && (
+                  <span style={{ fontSize:"11px", color:"#9a9089" }}>Scegli almeno un prodotto: subject e HTML vengono scritti su quelli.</span>
+                )}
+              </div>
             </div>
+
+            {/* Storico email generate in questo browser */}
+            {history.length > 0 && (
+              <div style={{ ...S.sec, background:"#ffffff" }}>
+                <div style={S.secTitle}>Ultime email generate (salvate in questo browser)</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                  {history.map(h => (
+                    <div key={h.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"8px 10px", borderRadius:"7px", background:"#f5f1ea", border:"1px solid #e8ddd0", fontSize:"11px" }}>
+                      <span style={{ color:"#9a9089", fontFamily:"'Space Mono',monospace", fontSize:"10px", whiteSpace:"nowrap" }}>{formatDateTime(h.createdAt)}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, color:"#1a1a1a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.subject}</div>
+                        <div style={{ fontSize:"10px", color:"#7a7a7a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {(TEMPLATE_OPTIONS.find(t=>t.id===h.templateStyle)?.label || h.templateStyle)} · {(h.products || []).join(", ")}
+                        </div>
+                      </div>
+                      <button onClick={()=>openFromHistory(h)} style={{ ...S.btn(true), fontSize:"10px", padding:"4px 10px" }}>Apri</button>
+                      <button onClick={()=>deleteFromHistory(h.id)} title="Elimina dallo storico" style={{ ...S.btn(false), fontSize:"10px", padding:"4px 8px" }}>{I.x}</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>)}
 
           {/* STEP 1: Loading */}
@@ -1203,22 +1403,46 @@ export default function App() {
             <div style={{ ...S.sec, textAlign:"center", padding:"50px 20px" }}>
               <div style={{ width:"36px", height:"36px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
               <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Claude analizza {CAMPAIGNS.length} campagne...</div>
+              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Claude analizza {CAMPAIGNS.length} campagne... <span style={{ color:"#9a9089", fontWeight:400 }}>{genElapsed}s</span></div>
               <div style={{ fontSize:"11px", color:"#7a7a7a", marginTop:"4px" }}>Calcolo pattern, CR, revenue per tipo</div>
             </div>
           )}
 
+          {/* STEP 2: errore strategia */}
+          {step===2 && result?.error && htmlStep===0 && (
+            <div style={{ ...S.sec, borderLeft:"3px solid #d64545" }}>
+              <div style={{ ...S.secTitle, color:"#d64545" }}>{I.alert} Strategia non generata</div>
+              <p style={{ fontSize:"12px", color:"#3a3a3a", lineHeight:1.6, margin:"0 0 12px" }}>{result.error}</p>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={generateStrategy} style={{ ...S.btn(true), fontSize:"11px" }}>↻ Riprova</button>
+                <button onClick={()=>{setStep(0);setResult(null);setSelectedSubject(null);}} style={{ ...S.btn(false), fontSize:"11px" }}>← Riconfigura</button>
+              </div>
+            </div>
+          )}
+
           {/* STEP 2: Strategy result + Subject selection */}
-          {step===2 && result && htmlStep===0 && (
+          {step===2 && result && !result.error && htmlStep===0 && (
             <div>
               <div style={{ ...S.sec, borderLeft:"3px solid #b8924a" }}>
                 <div style={S.secTitle}>{I.spark} Raccomandazione</div>
                 <p style={{ fontSize:"12px", color:"#3a3a3a", lineHeight:1.6, margin:0 }}>{result.recommendation}</p>
+                {result.best_day && (
+                  <p style={{ fontSize:"11px", color:"#5a5a5a", margin:"8px 0 0" }}>Giorno consigliato: <b style={{ color:"#1a1a1a" }}>{result.best_day}</b></p>
+                )}
               </div>
+
+              {result.warnings?.length > 0 && (
+                <div style={{ ...S.sec, background:"#b8924a0a", borderColor:"#b8924a33" }}>
+                  <div style={S.secTitle}>Attenzioni</div>
+                  <ul style={{ margin:0, paddingLeft:"18px", fontSize:"11px", color:"#5a5a5a", lineHeight:1.6 }}>
+                    {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
 
               {result.subjects?.length > 0 && (
                 <div style={S.sec}>
-                  <div style={S.secTitle}>Clicca la subject line preferita → parte la generazione HTML</div>
+                  <div style={S.secTitle}>Clicca la {isStatementTemplate ? "proposta" : "subject line"} preferita → parte la generazione HTML</div>
                   <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                     {result.subjects.map((s,i) => (
                       <button key={i} onClick={()=>generateHtml(i)} style={{
@@ -1227,9 +1451,17 @@ export default function App() {
                         borderRadius:"8px", padding:"14px 16px", textAlign:"left", cursor:"pointer",
                         fontFamily:"inherit", transition:"all 0.15s", position:"relative"
                       }}>
-                        {s.score && <span style={{ position:"absolute", top:"8px", right:"12px", fontSize:"9px", padding:"2px 6px", borderRadius:"4px", background:s.score>=80?"#1a9d941a":"#b8924a1a", color:s.score>=80?"#1a9d94":"#b8924a", fontWeight:700 }}>{s.score}/100</span>}
-                        <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · {s.subject?.length || 0} char · clicca per generare</div>
-                        <div style={{ fontSize:"15px", fontWeight:700, color:selectedSubject===i?"#b8924a":"#1a1a1a", marginBottom:"4px" }}>{s.subject}</div>
+                        {s.score > 0 && <span style={{ position:"absolute", top:"8px", right:"12px", fontSize:"9px", padding:"2px 6px", borderRadius:"4px", background:s.score>=80?"#1a9d941a":"#b8924a1a", color:s.score>=80?"#1a9d94":"#b8924a", fontWeight:700 }}>{s.score}/100</span>}
+                        <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · subject {s.subject?.length || 0} char · clicca per generare</div>
+                        {isStatementTemplate && s.statement && (
+                          <div style={{ fontSize:"22px", fontWeight:800, letterSpacing:"1px", color:"#1a1a1a", marginBottom:"4px", fontFamily:"'Bebas Neue',sans-serif" }}>
+                            {(statementOverride.trim() || s.statement).toUpperCase()}
+                            {statementOverride.trim() && <span style={{ fontSize:"9px", color:"#b8924a", marginLeft:"8px", fontFamily:"inherit", letterSpacing:0 }}>(statement manuale)</span>}
+                          </div>
+                        )}
+                        <div style={{ fontSize: isStatementTemplate ? "12px" : "15px", fontWeight:700, color:selectedSubject===i?"#b8924a":"#1a1a1a", marginBottom:"4px" }}>
+                          {isStatementTemplate && <span style={{ fontWeight:400, color:"#7a7a7a" }}>Subject: </span>}{s.subject}
+                        </div>
                         <div style={{ fontSize:"11px", color:"#7a7a7a", fontStyle:"italic", marginBottom:"4px" }}>Preview: {s.preview}</div>
                         <div style={{ fontSize:"10px", color:"#7a7a7a" }}>{s.rationale}</div>
                         {selectedSubject===i && <div style={{ position:"absolute", top:"50%", right:"16px", transform:"translateY(-50%)", color:"#b8924a" }}>{I.check}</div>}
@@ -1237,16 +1469,14 @@ export default function App() {
                     ))}
                   </div>
                   <div style={{ marginTop:"12px", fontSize:"10px", color:"#7a7a7a", textAlign:"center" }}>
-                    Cliccando una subject si genera automaticamente l'HTML dell'email con {config.products.length || "6 default"} prodotti
+                    Cliccando si genera l'HTML dell'email con {isStatementTemplate ? `${selectedProducts[0]?.name || "il primo prodotto"}` : `${selectedProducts.length} prodott${selectedProducts.length === 1 ? "o" : "i"}`}
                   </div>
                 </div>
               )}
 
-              {/* Extra info */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
-                {result.email_structure && <div style={S.sec}><div style={S.secTitle}>Struttura</div><p style={{ fontSize:"11px", color:"#5a5a5a", lineHeight:1.5, margin:0 }}>{result.email_structure}</p></div>}
-                {result.products_suggestion && <div style={S.sec}><div style={S.secTitle}>Prodotti</div><p style={{ fontSize:"11px", color:"#5a5a5a", lineHeight:1.5, margin:0 }}>{result.products_suggestion}</p></div>}
-              </div>
+              {result.email_structure && (
+                <div style={S.sec}><div style={S.secTitle}>Struttura</div><p style={{ fontSize:"11px", color:"#5a5a5a", lineHeight:1.5, margin:0 }}>{result.email_structure}</p></div>
+              )}
 
               <button onClick={()=>{setStep(0);setResult(null);setSelectedSubject(null);}} style={{ ...S.btn(false), marginTop:"8px", display:"flex", alignItems:"center", gap:"4px", fontSize:"11px" }}>← Riconfigura</button>
             </div>
@@ -1256,68 +1486,111 @@ export default function App() {
           {htmlStep===1 && (
             <div style={{ ...S.sec, textAlign:"center", padding:"50px 20px" }}>
               <div style={{ width:"36px", height:"36px", border:"3px solid #e8ddd0", borderTopColor:"#b8924a", borderRadius:"50%", margin:"0 auto 16px", animation:"spin 1s linear infinite" }}/>
-              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Generazione HTML email in corso...</div>
-              <div style={{ fontSize:"11px", color:"#7a7a7a", marginTop:"4px" }}>Template Occhiale Matto con {config.products.length || 6} prodotti, dark mode, CTA, mobile responsive</div>
+              <div style={{ fontSize:"13px", color:"#b8924a", fontWeight:600 }}>Generazione HTML email in corso... <span style={{ color:"#9a9089", fontWeight:400 }}>{genElapsed}s</span></div>
+              <div style={{ fontSize:"11px", color:"#7a7a7a", marginTop:"4px" }}>
+                Template {TEMPLATE_OPTIONS.find(t=>t.id===config.templateStyle)?.label || "Classico"} con {isStatementTemplate ? 1 : selectedProducts.length} prodott{(isStatementTemplate || selectedProducts.length === 1) ? "o" : "i"} · di solito 1-3 minuti
+              </div>
             </div>
           )}
 
-          {/* STEP 3: HTML Output */}
-          {htmlStep===2 && htmlOutput && (
+          {/* STEP 3: HTML Output (o errore) */}
+          {htmlStep===2 && (htmlOutput || htmlError) && (
             <div>
               {/* Subject + Preview bar */}
-              <div style={{ ...S.sec, display:"flex", gap:"16px", alignItems:"center", flexWrap:"wrap" }}>
-                <div>
-                  <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Subject</div>
-                  <div style={{ fontSize:"14px", fontWeight:700, color:"#b8924a" }}>{result?.subjects?.[selectedSubject]?.subject || "—"}</div>
-                </div>
-                <div style={{ width:"1px", height:"30px", background:"#e8ddd0" }}/>
-                <div>
-                  <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Preview</div>
-                  <div style={{ fontSize:"12px", color:"#5a5a5a" }}>{result?.subjects?.[selectedSubject]?.preview || "—"}</div>
-                </div>
-              </div>
-
-              {/* View toggle + Copy */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-                <div style={{ display:"flex", gap:"4px" }}>
-                  <button onClick={()=>setViewMode("preview")} style={S.btn(viewMode==="preview")}>{I.eye} Desktop</button>
-                  <button onClick={()=>setViewMode("mobile")} style={S.btn(viewMode==="mobile")}>📱 Mobile</button>
-                  <button onClick={()=>setViewMode("code")} style={S.btn(viewMode==="code")}>{I.code} Codice HTML</button>
-                </div>
-                <button onClick={copyHtml} style={{ ...S.goldBtn, fontSize:"12px", padding:"8px 18px" }}>
-                  {copied ? <>{I.check} Copiato!</> : <>{I.copy} Copia HTML</>}
-                </button>
-              </div>
-
-              {/* Output */}
-              {viewMode==="code" ? (
-                <div style={{ ...S.sec, padding:0 }}>
-                  <pre style={{ margin:0, padding:"16px", fontSize:"10px", color:"#5a5a5a", fontFamily:"'Space Mono',monospace", overflowX:"auto", maxHeight:"600px", overflowY:"auto", lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{htmlOutput}</pre>
-                </div>
-              ) : (
-                <div style={{ ...S.sec, padding:0, overflow:"hidden", display:"flex", justifyContent:"center", background: viewMode==="mobile" ? "#faf7f2" : "transparent" }}>
-                  <iframe
-                    srcDoc={htmlOutput}
-                    style={{
-                      width: viewMode==="mobile" ? "390px" : "100%",
-                      maxWidth: viewMode==="mobile" ? "390px" : "100%",
-                      height: viewMode==="mobile" ? "780px" : "700px",
-                      border: viewMode==="mobile" ? "8px solid #e8ddd0" : "none",
-                      borderRadius: viewMode==="mobile" ? "28px" : "10px",
-                      background: "#e8ddd0",
-                      margin: viewMode==="mobile" ? "16px 0" : "0"
-                    }}
-                    title="Email Preview"
-                    sandbox="allow-same-origin"
-                  />
+              {currentEmail && (
+                <div style={{ ...S.sec, display:"flex", gap:"16px", alignItems:"center", flexWrap:"wrap" }}>
+                  <div>
+                    <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Subject</div>
+                    <div style={{ fontSize:"14px", fontWeight:700, color:"#b8924a", display:"flex", alignItems:"center", gap:"6px" }}>
+                      {currentEmail.subject || "—"}
+                      <button onClick={()=>copyField("subject", currentEmail.subject)} title="Copia subject" style={{ background:"none", border:"none", cursor:"pointer", color:"#9a9089", padding:0, display:"inline-flex" }}>{copiedField==="subject" ? I.check : I.copy}</button>
+                    </div>
+                  </div>
+                  <div style={{ width:"1px", height:"30px", background:"#e8ddd0" }}/>
+                  <div style={{ flex:1, minWidth:"200px" }}>
+                    <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Preview</div>
+                    <div style={{ fontSize:"12px", color:"#5a5a5a", display:"flex", alignItems:"center", gap:"6px" }}>
+                      {currentEmail.preview || "—"}
+                      <button onClick={()=>copyField("preview", currentEmail.preview)} title="Copia preview" style={{ background:"none", border:"none", cursor:"pointer", color:"#9a9089", padding:0, display:"inline-flex" }}>{copiedField==="preview" ? I.check : I.copy}</button>
+                    </div>
+                  </div>
+                  {currentEmail.statement && (
+                    <>
+                      <div style={{ width:"1px", height:"30px", background:"#e8ddd0" }}/>
+                      <div>
+                        <div style={{ fontSize:"9px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px" }}>Statement</div>
+                        <div style={{ fontSize:"12px", fontWeight:700, color:"#1a1a1a" }}>{currentEmail.statement.toUpperCase()}</div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
+              {htmlError && (
+                <div style={{ ...S.sec, borderLeft:"3px solid #d64545", background:"#d645450a" }}>
+                  <div style={{ ...S.secTitle, color:"#d64545" }}>{I.alert} Errore durante la generazione</div>
+                  <p style={{ fontSize:"12px", color:"#3a3a3a", margin:0 }}>{htmlError}</p>
+                </div>
+              )}
+
+              {htmlWarnings.length > 0 && (
+                <div style={{ ...S.sec, background:"#b8924a0a", borderColor:"#b8924a44" }}>
+                  <div style={{ ...S.secTitle, color:"#b8924a" }}>{I.alert} Da controllare prima di incollare su Klaviyo</div>
+                  <ul style={{ margin:0, paddingLeft:"18px", fontSize:"11px", color:"#5a5a5a", lineHeight:1.6 }}>
+                    {htmlWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {htmlOutput && (
+                <>
+                  {/* View toggle + Copy */}
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px", flexWrap:"wrap" }}>
+                    <div style={{ display:"flex", gap:"4px" }}>
+                      <button onClick={()=>setViewMode("preview")} style={S.btn(viewMode==="preview")}>{I.eye} Desktop</button>
+                      <button onClick={()=>setViewMode("mobile")} style={S.btn(viewMode==="mobile")}>📱 Mobile</button>
+                      <button onClick={()=>setViewMode("code")} style={S.btn(viewMode==="code")}>{I.code} Codice HTML</button>
+                    </div>
+                    <button onClick={copyHtml} style={{ ...S.goldBtn, fontSize:"12px", padding:"8px 18px" }}>
+                      {copied ? <>{I.check} Copiato!</> : <>{I.copy} Copia HTML</>}
+                    </button>
+                  </div>
+
+                  {/* Output */}
+                  {viewMode==="code" ? (
+                    <div style={{ ...S.sec, padding:0 }}>
+                      <pre style={{ margin:0, padding:"16px", fontSize:"10px", color:"#5a5a5a", fontFamily:"'Space Mono',monospace", overflowX:"auto", maxHeight:"600px", overflowY:"auto", lineHeight:1.5, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{htmlOutput}</pre>
+                    </div>
+                  ) : (
+                    <div style={{ ...S.sec, padding:0, overflow:"hidden", display:"flex", justifyContent:"center", background: viewMode==="mobile" ? "#faf7f2" : "transparent" }}>
+                      <iframe
+                        srcDoc={htmlOutput}
+                        style={{
+                          width: viewMode==="mobile" ? "390px" : "100%",
+                          maxWidth: "100%",
+                          height: viewMode==="mobile" ? "780px" : "700px",
+                          border: viewMode==="mobile" ? "8px solid #e8ddd0" : "none",
+                          borderRadius: viewMode==="mobile" ? "28px" : "10px",
+                          background: "#e8ddd0",
+                          margin: viewMode==="mobile" ? "16px 0" : "0"
+                        }}
+                        title="Email Preview"
+                        sandbox="allow-same-origin"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Actions */}
-              <div style={{ display:"flex", gap:"8px", marginTop:"10px" }}>
-                <button onClick={()=>{setHtmlStep(0);setSelectedSubject(null);}} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Cambia subject</button>
-                <button onClick={()=>{setStep(0);setResult(null);setHtmlStep(0);setHtmlOutput("");setSelectedSubject(null);}} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Nuova email</button>
-                <button onClick={()=>generateHtml()} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>↻ Rigenera HTML</button>
+              <div style={{ display:"flex", gap:"8px", marginTop:"10px", flexWrap:"wrap" }}>
+                {result?.subjects?.length > 0 && (
+                  <button onClick={()=>{setHtmlStep(0);setHtmlError(null);}} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Cambia subject</button>
+                )}
+                <button onClick={resetGenerator} style={{ ...S.btn(false), display:"flex", alignItems:"center", gap:"4px" }}>← Nuova email</button>
+                {result?.subjects?.length > 0 && selectedSubject !== null && (
+                  <button onClick={()=>generateHtml()} style={{ ...S.btn(!!htmlError), display:"flex", alignItems:"center", gap:"4px" }}>↻ Rigenera HTML</button>
+                )}
               </div>
             </div>
           )}
@@ -1619,7 +1892,7 @@ export default function App() {
           )}
 
           {advWeeks !== null && advWeeks.length > 0 && (
-            <div style={{ display:"grid", gridTemplateColumns:"260px 1fr", gap:"16px" }}>
+            <div className="om-adv-layout">
               {/* SIDEBAR weeks list */}
               <div style={{ background:"#ffffff", border:"1px solid #e8ddd0", borderRadius:"10px", overflow:"hidden" }}>
                 <div style={{ padding:"12px 14px", borderBottom:"1px solid #e8ddd0", fontSize:"10px", color:"#7a7a7a", textTransform:"uppercase", letterSpacing:"1px", fontWeight:700 }}>
@@ -1907,12 +2180,19 @@ export default function App() {
                                       const kk = deriveAdvKPIs(wk);
                                       return (kk as any)?.[row.key] || 0;
                                     });
-                                    const maxV = Math.max(...values), minV = Math.min(...values);
+                                    // Per le metriche "più basso è meglio" lo 0 vuol dire "nessun dato"
+                                    // (es. CPA senza acquisti): non va premiato come migliore.
+                                    const positives = values.filter(v => v > 0);
+                                    const maxV = Math.max(...values);
+                                    const minV = row.highBetter === false
+                                      ? (positives.length ? Math.min(...positives) : 0)
+                                      : Math.min(...values);
                                     return (
                                       <tr key={row.key} style={{ borderBottom:"1px solid #f5f0ea" }}>
                                         <td style={{ padding:"9px 14px", color:"#3a3a3a", fontWeight:500 }}>{row.label}</td>
                                         {values.map((v, i) => {
-                                          const isBest = row.highBetter !== undefined && values.length > 1 && (row.highBetter ? v === maxV : v === minV) && maxV !== minV;
+                                          const isBest = row.highBetter !== undefined && values.length > 1 && maxV !== minV &&
+                                            (row.highBetter ? v === maxV : (v > 0 && v === minV));
                                           return (
                                             <td key={i} style={{ padding:"9px 14px", textAlign:"right", color: isBest ? "#1a9d94" : "#1a1a1a", fontWeight: isBest ? 700 : 400, fontFamily:"'Space Mono', monospace" }}>
                                               {row.fmt!(v)}
@@ -2212,8 +2492,8 @@ export default function App() {
                 onClick={() => {
                   const promptText = `Create a realistic close-up portrait of a model wearing the sunglasses shown in the attached product image.\n\nIMPORTANT RULES:\n- The sunglasses must remain EXACTLY the same as in the product photo: same frame shape, same colors, same lenses, same materials and proportions. Do not redesign or reinterpret the glasses.\n- The reference model image is ONLY for inspiration (pose, mood, composition, lighting). The generated person must NOT be the same individual.\n- Create a DIFFERENT model with different facial features, bone structure, and identity. The person can have a similar vibe or style, but must clearly be a different individual.\n- Change facial traits such as jawline, nose shape, eyes, lips, and facial proportions so the face is recognizably different from the reference model.\n- The sunglasses must fit naturally on the face with realistic lighting, reflections, and shadows.\n- Keep the original background from the reference image unchanged.\n- Maintain the same camera angle and composition.\n\nStyle:\nUltra-realistic fashion photography, natural skin texture, high-end lifestyle campaign quality.\n\nFraming:\nClose-up portrait (head and upper shoulders), centered composition, sharp focus on the face and sunglasses.\n\nLighting:\nNatural cinematic lighting consistent with the original image.\n\nGoal:\nA believable lifestyle photo where a new model (different from the reference person) naturally wears the exact sunglasses from the product image.`;
                   navigator.clipboard.writeText(promptText).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
+                    setCoverCopied(true);
+                    setTimeout(() => setCoverCopied(false), 1500);
                   });
                 }}
                 style={{
@@ -2222,11 +2502,11 @@ export default function App() {
                   fontWeight:600,
                   borderRadius:"6px",
                   border:"none",
-                  background: copied ? "#1a9d94" : "linear-gradient(135deg,#b8924a,#8a6630)",
+                  background: coverCopied ? "#1a9d94" : "linear-gradient(135deg,#b8924a,#8a6630)",
                   color:"#ffffff",
                   cursor:"pointer"
                 }}
-              >{copied ? "✓ Copiato!" : "📋 Copia prompt"}</button>
+              >{coverCopied ? "✓ Copiato!" : "📋 Copia prompt"}</button>
             </div>
             <pre style={{
               margin:0,

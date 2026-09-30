@@ -8,12 +8,15 @@ export type ScrapedProduct = {
   id: string;
   handle: string;
   title: string;
+  vendor: string;
   price: number;
   comparePrice: number | null;
   currency: string;
   imageUrl: string | null;
   url: string;
   tags: string[];
+  colors: string[];     // valori dell'opzione "Colore" delle varianti disponibili
+  description: string;  // body_html ripulito (su questo store di solito sono le misure)
   available: boolean;
   productType: string;
   createdAt: string;
@@ -25,6 +28,31 @@ function normalizeTags(raw: any): string[] {
   if (Array.isArray(raw)) return raw.map(t => String(t).trim()).filter(Boolean);
   if (typeof raw === "string") return raw.split(",").map(t => t.trim()).filter(Boolean);
   return [];
+}
+
+/** HTML della scheda prodotto → testo semplice su una riga. */
+function htmlToText(html: string): string {
+  return String(html || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;|&rsquo;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Colori delle varianti disponibili (opzione "Colore"/"Color"), senza doppioni. */
+function pickColors(p: any): string[] {
+  const options: any[] = Array.isArray(p.options) ? p.options : [];
+  const idx = options.findIndex(o => /^(colore|color|colour)$/i.test(String(o?.name || "").trim()));
+  if (idx === -1) return [];
+  const key = `option${idx + 1}`;
+  const values = (p.variants || [])
+    .filter((v: any) => v.available)
+    .map((v: any) => String(v[key] || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set<string>(values));
 }
 
 /**
@@ -58,6 +86,28 @@ function pickProductImage(images: any[]): string | null {
   return anyImg?.src || null;
 }
 
+function toScraped(p: any): ScrapedProduct {
+  const firstVariant = p.variants?.[0];
+  return {
+    id: String(p.id),
+    handle: p.handle,
+    title: p.title,
+    vendor: p.vendor || "",
+    price: parseFloat(firstVariant?.price || "0"),
+    comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
+    currency: "EUR",
+    imageUrl: pickProductImage(p.images),
+    url: `${STORE_URL}/products/${p.handle}`,
+    tags: normalizeTags(p.tags),
+    colors: pickColors(p),
+    description: htmlToText(p.body_html),
+    available: (p.variants || []).some((v: any) => v.available),
+    productType: p.product_type || "",
+    createdAt: p.created_at || "",
+    publishedAt: p.published_at || ""
+  };
+}
+
 export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
   const all: ScrapedProduct[] = [];
 
@@ -65,11 +115,12 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
     const url = `${STORE_URL}/products.json?limit=250&page=${page}`;
     const res = await fetch(url, {
       headers: { "User-Agent": "OcchialeMattoPlatform/1.0" },
-      cache: "no-store",
-      next: { revalidate: 600 }
+      cache: "no-store"
     });
 
     if (!res.ok) {
+      // Se fallisce già la prima pagina il catalogo è inutilizzabile: meglio un errore chiaro.
+      if (page === 1) throw new Error(`occhialematto.com ha risposto ${res.status}`);
       console.error(`[scraper] page ${page} failed:`, res.status);
       break;
     }
@@ -78,25 +129,7 @@ export async function scrapeAllProducts(): Promise<ScrapedProduct[]> {
     const products = json?.products || [];
     if (products.length === 0) break;
 
-    for (const p of products) {
-      const firstVariant = p.variants?.[0];
-
-      all.push({
-        id: String(p.id),
-        handle: p.handle,
-        title: p.title,
-        price: parseFloat(firstVariant?.price || "0"),
-        comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
-        currency: "EUR",
-        imageUrl: pickProductImage(p.images),
-        url: `${STORE_URL}/products/${p.handle}`,
-        tags: normalizeTags(p.tags),
-        available: (p.variants || []).some((v: any) => v.available),
-        productType: p.product_type || "",
-        createdAt: p.created_at || "",
-        publishedAt: p.published_at || ""
-      });
-    }
+    for (const p of products) all.push(toScraped(p));
 
     if (products.length < 250) break;
   }
@@ -108,30 +141,12 @@ export async function scrapeProduct(handle: string): Promise<ScrapedProduct | nu
   const url = `${STORE_URL}/products/${handle}.json`;
   const res = await fetch(url, {
     headers: { "User-Agent": "OcchialeMattoPlatform/1.0" },
-    cache: "no-store",
-    next: { revalidate: 300 }
+    cache: "no-store"
   });
 
   if (!res.ok) return null;
   const json: any = await res.json();
   const p = json?.product;
   if (!p) return null;
-
-  const firstVariant = p.variants?.[0];
-
-  return {
-    id: String(p.id),
-    handle: p.handle,
-    title: p.title,
-    price: parseFloat(firstVariant?.price || "0"),
-    comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
-    currency: "EUR",
-    imageUrl: pickProductImage(p.images),
-    url: `${STORE_URL}/products/${p.handle}`,
-    tags: normalizeTags(p.tags),
-    available: (p.variants || []).some((v: any) => v.available),
-    productType: p.product_type || "",
-    createdAt: p.created_at || "",
-    publishedAt: p.published_at || ""
-  };
+  return toScraped(p);
 }

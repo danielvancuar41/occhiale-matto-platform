@@ -14,6 +14,9 @@
  * 3. Da quel momento ogni email generata rispetterà la nuova regola
  */
 
+// Anno corrente: evita che alt text e copy restino fermi a un anno passato.
+const YEAR = new Date().getFullYear();
+
 export const BRAND_RULES = {
   // ─────────────────────────────────────────────────
   // VINCOLI INVIOLABILI (PRIORITÀ ASSOLUTA)
@@ -21,7 +24,7 @@ export const BRAND_RULES = {
   // Questi vincoli sovrascrivono qualunque altra istruzione successiva.
   // ─────────────────────────────────────────────────
   vincoli_inviolabili: [
-    "FOTO PRODOTTO senza rettangoli o sfondi: la <td> che contiene <img> NON deve avere style background:#fff o background-color o border o padding > 8px. Solo <td align=\"center\" style=\"padding:0;line-height:0\"> con dentro <img>. Sbagliato: <td style=\"background:#ffffff;padding:24px\">. Giusto: <td align=\"center\" style=\"padding:0;line-height:0\"><img src=\"...\" style=\"display:block;width:100%;max-width:280px;height:auto;border:0;outline:none\"></td>",
+    "FOTO PRODOTTO senza rettangoli o sfondi: la <td> che contiene <img> NON deve avere style background:#fff o background-color o border o padding > 8px. Solo <td align=\"center\" style=\"padding:0;line-height:0\"> con dentro <img>. Sbagliato: <td style=\"background:#ffffff;padding:24px\">. Giusto: <td align=\"center\" style=\"padding:0;line-height:0\"><img src=\"{{IMG_n}}\" style=\"display:block;width:100%;max-width:280px;height:auto;border:0;outline:none\"></td>",
     "DIMENSIONI IMMAGINI tutte uguali, MAI TAGLIARE LA FOTO: ogni immagine prodotto deve avere ESATTAMENTE gli stessi attributi width=\"280\" height=\"280\" e stile style=\"display:block;width:100%;max-width:280px;height:280px;object-fit:contain;background-color:transparent\". CRITICO 1: usa object-fit:CONTAIN (non cover). Cover taglia la foto e mostra parti mancanti dell'occhiale (telai tagliati, lenti incomplete). Contain mostra l'occhiale INTERO. CRITICO 2: background-color DEVE essere TRANSPARENT, MAI #ffffff né altro colore. Con transparent lo spazio vuoto attorno alla foto (dovuto al contain) prende il colore del container padre e sparisce visivamente. Con #ffffff appare un fastidioso RETTANGOLO BIANCO intorno all'occhiale che è un bug ricorrente da NON ripetere. L'altezza fissa 280px serve solo a uniformare l'ingombro visivo nella griglia.",
     "TUTTO CENTRATO ANCHE SU MOBILE: ogni <td> testo deve avere align=\"center\" e style=\"text-align:center\". Hero, eyebrow, headline, prezzo, nome prodotto, CTA, payoff, footer: TUTTO va centrato orizzontalmente. Nessun text-align:left mai. Sbagliato: <td style=\"padding:20px\">. Giusto: <td align=\"center\" style=\"text-align:center;padding:20px\">. IMPORTANTE PER MOBILE: aggiungere sempre nella media query mobile una regola che FORZI il centering con !important su tutti i td testuali critici, es. @media(max-width:600px){ .txt-center td, .txt-center p, .txt-center h1, .txt-center h2 { text-align:center !important; } } — perché alcuni email client mobile ereditano male gli stili align e finiscono per allineare a sinistra. Applica la classe .txt-center o simile a tutte le celle con testo.",
     "MOBILE 2-PRODOTTI-PER-RIGA: quando l'email mostra 2 o più prodotti affiancati, la griglia DEVE rimanere 2 colonne anche su mobile. NON usare media query che convertono le card a 100% width su schermo piccolo. Sbagliato: @media (max-width:600px) { .product-col { width: 100% !important; display: block; } }. Giusto: @media (max-width:600px) { .product-col { width: 50% !important; } } e fonts ridotti per stare comodi nello stretto. SEMPRE 2 card per riga, MAI 1 per riga su mobile.",
@@ -36,6 +39,7 @@ export const BRAND_RULES = {
     "MAI inventare prezzi. Usa ESCLUSIVAMENTE il prezzo fornito nel catalog per ogni prodotto. Se il prezzo non è disponibile, scrivi '€—' (trattino em dash) invece di inventare un numero.",
     "MAI inventare URL prodotti. Usa ESCLUSIVAMENTE l'URL completo fornito nel catalog. NON generare handles fittizi (es. 'product-slug-copia', 'product-v2', 'model-new').",
     "MAI inventare nomi prodotti. Usa ESCLUSIVAMENTE i nomi esatti forniti nel catalog, senza aggiungere parole (es. se il catalog dice 'Slick', scrivi 'Slick' e non 'Slick Edition' o 'Nuovo Slick').",
+    "MAI inventare caratteristiche del prodotto: materiale (acetato, metallo, titanio...), provenienza ('italiano', 'made in Italy'...), tipo di lenti (polarizzate, fotocromatiche, graduate...), colori o misure. Puoi citare SOLO quello che compare nei DATI UFFICIALI del prodotto (nome, caratteristiche, colori, misure). Se un dato non c'è, non nominarlo: meglio un copy su stile e attitudine che un dato falso. Vale anche per alt text e preview.",
     "Se un prodotto non ha URL immagine valida, omettilo dall'email invece di usare un placeholder."
   ],
 
@@ -57,11 +61,12 @@ export const BRAND_RULES = {
   // ─────────────────────────────────────────────────
   struttura_layout: [
     "La tagline 'CRAZY FASHION EYEWEAR SINCE 2019' va SOLO nel footer, mai nell'header o in altre sezioni.",
-    "Logo header: SEMPRE 180px di larghezza, centrato, su bg #1a1a1a.",
-    "Logo footer: SEMPRE 130px di larghezza, centrato.",
+    "Logo header: 180px di larghezza, centrato, su bg #1a1a1a (salvo dimensioni/sfondo diversi indicati dal TEMPLATE selezionato, es. STATEMENT).",
+    "Logo footer: 130px di larghezza, centrato (salvo diversa indicazione del TEMPLATE selezionato).",
     "Quote block: chiudere con la firma breve '— OM' (em dash + OM), mai con '— OCCHIALE MATTO TEAM' o altre firme aziendali.",
-    "Ogni email deve avere la strip feature 3-4 colonne emoji (🚚 spedizione · 🔄 reso · ☀️ UV400 · 📦 custodia) come elemento di rassicurazione.",
-    "Footer obbligatorio: logo, payoff, 3 negozi Roma cliccabili su Google Maps (Baldo degli Ubaldi 212, Tuscolana 487A, CC Euroma 2), link social testuali, {% unsubscribe %}."
+    "Strip feature 3-4 colonne emoji (🚚 spedizione · 🔄 reso · ☀️ UV400 · 📦 custodia) come elemento di rassicurazione in ogni email, TRANNE nei template MINIMAL e STATEMENT che la escludono esplicitamente.",
+    "Footer obbligatorio: logo, payoff, 3 negozi Roma cliccabili su Google Maps (Baldo degli Ubaldi 212, Tuscolana 487A, CC Euroma 2), link social testuali, link di disiscrizione.",
+    "LINK DI DISISCRIZIONE (Klaviyo): scrivilo SEMPRE così: <a href=\"{% unsubscribe_link %}\" style=\"...\">Disiscriviti</a>. MAI mettere {% unsubscribe %} dentro un href: quel tag genera già un link completo e dentro un href lo rompe (email non conforme)."
   ],
 
   // ─────────────────────────────────────────────────
@@ -81,7 +86,7 @@ export const BRAND_RULES = {
   // ─────────────────────────────────────────────────
   tecnico_html: [
     "Ogni CTA deve avere doppia protezione colore: il bottone <a> deve avere style color inline, E dentro deve esserci uno <span> con 'color:#XXX !important; text-decoration:none !important;' per forzare il colore anche in Gmail dark mode.",
-    "Ogni img deve avere alt text descrittivo reale, non generico (es. 'Occhiale Matto Slick - occhiale da sole 2026' e non 'prodotto'). MAI usare anni passati (2024, 2025) negli alt text o nel copy: siamo nel 2026.",
+    `Ogni img deve avere alt text descrittivo reale, non generico (es. 'Occhiale Matto Slick - occhiale da sole ${YEAR}' e non 'prodotto'). MAI usare anni passati negli alt text o nel copy: siamo nel ${YEAR}.`,
     "Non usare display:inline-block su td per layout responsive. Per la strip feature usa table nidificate con width percentuali.",
     "Non mettere style duplicati o in conflitto nello stesso elemento (es. 'color:#1a1a1a' e poi 'color:#f0ebe3' nello stesso style: vince l'ultimo, ma è codice sporco).",
     "Evita CSS grid e flexbox nel body dell'email (supporto email client limitato). Usa solo table con role='presentation'."
