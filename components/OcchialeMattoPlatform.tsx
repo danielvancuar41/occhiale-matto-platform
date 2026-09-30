@@ -66,8 +66,12 @@ const TEMPLATE_OPTIONS = [
 const STATEMENT_POSITIONS = [
   { id:"top", label:"Testo sopra", desc:"Frase sopra la foto" },
   { id:"bottom", label:"Testo sotto", desc:"Frase sotto la foto" },
-  { id:"both", label:"Sopra + sotto", desc:"Frase sopra, rinforzo sotto" },
+  { id:"both", label:"Sopra + sotto", desc:"Gancio sopra, chiusura sotto" },
+  { id:"split", label:"Frase spezzata", desc:"Una frase, metà sopra e metà sotto" },
 ];
+
+// Con "Sopra + sotto" e "Frase spezzata" le due frasi viaggiano separate da "/"
+const isPairPosition = pos => pos === "both" || pos === "split";
 
 // ── COLOR MODES (light/dark for HTML output) ──
 const COLOR_MODES = [
@@ -88,6 +92,7 @@ const MAX_HISTORY = 10;
 // Prodotto nel formato atteso da /api/generate
 const toApiProduct = p => ({
   id: p.id, name: p.name, price: p.price, category: p.category || "", url: p.url, img: p.img,
+  imgW: p.imgW || 0, imgH: p.imgH || 0,
   isNew: !!p.new, features: p.features || [], colors: p.colors || [], details: p.details || ""
 });
 
@@ -839,6 +844,7 @@ export default function App() {
           mode: "strategy",
           emailType: TYPE_LABELS[config.type] || config.type,
           templateStyle: config.templateStyle || "classico",
+          statementPosition: config.statementPosition || "top",
           selectedProducts: selectedProds.map(toApiProduct),
           recentCampaigns: recent.map(toApiCampaign),
           topPerformers: best.map(toApiCampaign),
@@ -1237,10 +1243,12 @@ export default function App() {
                       type="text"
                       value={statementOverride}
                       onChange={e=>setStatementOverride(e.target.value)}
-                      placeholder="Lascia vuoto per usare le proposte di Claude — o scrivi la frase (es. ULTIMI PEZZI)"
+                      placeholder={isPairPosition(config.statementPosition)
+                        ? "Lascia vuoto per usare le proposte di Claude — o scrivi sopra / sotto (es. SEMBRA CARO. / COSTA €29,99.)"
+                        : "Lascia vuoto per usare le proposte di Claude — o scrivi la frase (es. È TORNATO.)"}
                       style={{ width:"100%", padding:"10px 12px", borderRadius:"7px", border:"1px solid #e8ddd0", background:"#fff", fontFamily:"inherit", fontSize:"13px", color:"#1a1a1a", boxSizing:"border-box" }}
                     />
-                    <div style={{ fontSize:"9px", color:"#a0a0a0", marginTop:"4px" }}>Se compilato, questa frase sovrascrive lo statement scelto tra le proposte.</div>
+                    <div style={{ fontSize:"9px", color:"#a0a0a0", marginTop:"4px" }}>Se compilato, sovrascrive lo statement scelto tra le proposte.{isPairPosition(config.statementPosition) && " Separa la frase sopra e quella sotto con /."}</div>
                   </div>
                 </>
               )}
@@ -1455,7 +1463,7 @@ export default function App() {
                         <div style={{ fontSize:"9px", color:"#7a7a7a", marginBottom:"4px", textTransform:"uppercase", letterSpacing:"1px" }}>Opzione {i+1} · subject {s.subject?.length || 0} char · clicca per generare</div>
                         {isStatementTemplate && s.statement && (
                           <div style={{ fontSize:"22px", fontWeight:800, letterSpacing:"1px", color:"#1a1a1a", marginBottom:"4px", fontFamily:"'Bebas Neue',sans-serif" }}>
-                            {(statementOverride.trim() || s.statement).toUpperCase()}
+                            {(statementOverride.trim() || s.statement).toUpperCase().split("/").map((part, pi) => <div key={pi}>{part.trim()}</div>)}
                             {statementOverride.trim() && <span style={{ fontSize:"9px", color:"#b8924a", marginLeft:"8px", fontFamily:"inherit", letterSpacing:0 }}>(statement manuale)</span>}
                           </div>
                         )}

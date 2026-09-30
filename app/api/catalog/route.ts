@@ -78,6 +78,8 @@ export async function GET() {
           category: genderOf(tagsLower),
           url: p.url,
           img: p.imageUrl,
+          imgW: p.imageWidth,
+          imgH: p.imageHeight,
           new: daysOld < NEW_THRESHOLD_DAYS,
           tags: p.tags,
           features: featuresOf(p, tagsLower),

@@ -11,6 +11,7 @@ import {
 } from "@/lib/anthropic";
 import type { Campaign, Product, TemplateStyle, ColorMode, StatementPosition } from "@/lib/anthropic";
 import { postProcessHtml } from "@/lib/html-postprocess";
+import { heroPhoto } from "@/lib/image-crop";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -35,7 +36,7 @@ type GenerateRequest = {
 const MAX_PRODUCTS = 12;
 const TEMPLATES: TemplateStyle[] = ["classico", "minimal", "bold", "editorial", "statement"];
 const COLOR_MODES: ColorMode[] = ["light", "dark"];
-const POSITIONS: StatementPosition[] = ["top", "bottom", "both"];
+const POSITIONS: StatementPosition[] = ["top", "bottom", "both", "split"];
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -56,7 +57,9 @@ function sanitizeProducts(raw: unknown): Product[] {
     isNew: !!p?.isNew,
     features: strList(p?.features, 10, 60),
     colors: strList(p?.colors, 12, 60),
-    details: str(p?.details, 200)
+    details: str(p?.details, 200),
+    imgW: num(p?.imgW),
+    imgH: num(p?.imgH)
   })).filter(p => p.name && /^https:\/\//.test(p.url) && /^https:\/\//.test(p.img));
 }
 
@@ -126,7 +129,8 @@ async function generateStrategy(body: GenerateRequest) {
     topPerformers,
     focus: str(body.focus, 1000),
     notes: str(body.notes, 2000),
-    templateStyle
+    templateStyle,
+    statementPosition: oneOf(body.statementPosition, POSITIONS, "top")
   });
 
   const { text, stopReason } = await runClaude({
@@ -185,6 +189,11 @@ async function generateHtml(body: GenerateRequest) {
   }
 
   const templateStyle = oneOf(body.templateStyle, TEMPLATES, "classico");
+
+  // Statement: foto dell'occhiale senza il bianco sopra e sotto, così le frasi gli stanno vicine
+  const hero = templateStyle === "statement" ? await heroPhoto(products[0].img, products[0].imgW, products[0].imgH) : null;
+  if (hero?.cropped) products[0] = { ...products[0], img: hero.url };
+
   const { system, user } = buildHtmlPrompt({
     chosenSubject,
     chosenPreview,
@@ -194,7 +203,8 @@ async function generateHtml(body: GenerateRequest) {
     strategy: str(body.strategy, 2000),
     templateStyle,
     colorMode: oneOf(body.colorMode, COLOR_MODES, "light"),
-    statementPosition: oneOf(body.statementPosition, POSITIONS, "top")
+    statementPosition: oneOf(body.statementPosition, POSITIONS, "top"),
+    heroCropped: !!hero?.cropped
   });
 
   // Effort "low": strategia e copy sono già decisi allo step 2, qui conta restare

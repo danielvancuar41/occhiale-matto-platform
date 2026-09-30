@@ -77,6 +77,7 @@ lib/
 ├── anthropic.ts                # runClaude() + prompt strategia/HTML
 ├── brand-rules.ts              # regole brand iniettate nel prompt HTML
 ├── html-postprocess.ts         # placeholder → URL reali, controllo disiscrizione
+├── image-crop.ts               # Statement: toglie il bianco sopra e sotto la foto dell'occhiale
 ├── scraper.ts                  # lettura products.json di occhialematto.com
 ├── klaviyo.ts                  # campagne, statistiche, tipologia
 └── supabase.ts
@@ -103,6 +104,12 @@ lib/
 - Avviso se un link o un'immagine dell'email non ha un indirizzo valido.
 - Template Statement: la scelta arriva davvero alla strategia; subject e frase statement sono separate; usa un solo prodotto.
 - Anno e stagione nei prompt calcolati automaticamente.
+
+**Template Statement**
+- Quattro posizioni del testo: Testo sopra, Testo sotto, Sopra + sotto (gancio sopra, chiusura sotto) e la nuova Frase spezzata (metà frase sopra la foto, metà sotto).
+- Con Sopra + sotto e Frase spezzata Claude propone le due frasi insieme, separate da "/" (es. `SEMBRA CARO. / COSTA €29,99.`), partendo da un pacchetto di frasi approvate. Si possono scrivere anche a mano nello statement manuale.
+- La foto dell'occhiale viene ritagliata in automatico: si toglie solo il bianco sopra e sotto, e solo sulle foto con sfondo bianco. Dopo il ritaglio un controllo verifica che l'occhiale non tocchi il bordo; se qualcosa non torna si usa la foto intera. Le foto del negozio non vengono toccate.
+- Frasi più vicine alla foto (12px), frasi e "NUOVO ARRIVO" più piccoli, solo il logo in alto (mai la scritta), nome e prezzo su una riga.
 
 **Catalogo**
 - Esclusi gift card, catenine, kit cacciaviti, servizi lenti.

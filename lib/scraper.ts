@@ -13,6 +13,8 @@ export type ScrapedProduct = {
   comparePrice: number | null;
   currency: string;
   imageUrl: string | null;
+  imageWidth: number;   // dimensioni originali: servono per ritagliare la foto dal CDN
+  imageHeight: number;
   url: string;
   tags: string[];
   colors: string[];     // valori dell'opzione "Colore" delle varianti disponibili
@@ -64,7 +66,7 @@ function pickColors(p: any): string[] {
  * Strategia: scorri TUTTE le immagini e prendi la prima "pulita".
  * Fallback: se sono tutte sporche o senza src, usa la prima disponibile.
  */
-function pickProductImage(images: any[]): string | null {
+function pickProductImage(images: any[]): any | null {
   if (!Array.isArray(images) || images.length === 0) return null;
 
   const filenameOf = (src: string) => {
@@ -80,14 +82,14 @@ function pickProductImage(images: any[]): string | null {
   };
 
   const clean = images.find(img => img?.src && !isDirty(img));
-  if (clean?.src) return clean.src;
+  if (clean) return clean;
   // fallback: prima immagine con src (meglio una foto che nessuna)
-  const anyImg = images.find(img => img?.src);
-  return anyImg?.src || null;
+  return images.find(img => img?.src) || null;
 }
 
 function toScraped(p: any): ScrapedProduct {
   const firstVariant = p.variants?.[0];
+  const image = pickProductImage(p.images);
   return {
     id: String(p.id),
     handle: p.handle,
@@ -96,7 +98,9 @@ function toScraped(p: any): ScrapedProduct {
     price: parseFloat(firstVariant?.price || "0"),
     comparePrice: firstVariant?.compare_at_price ? parseFloat(firstVariant.compare_at_price) : null,
     currency: "EUR",
-    imageUrl: pickProductImage(p.images),
+    imageUrl: image?.src || null,
+    imageWidth: Number(image?.width) || 0,
+    imageHeight: Number(image?.height) || 0,
     url: `${STORE_URL}/products/${p.handle}`,
     tags: normalizeTags(p.tags),
     colors: pickColors(p),

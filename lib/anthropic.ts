@@ -137,11 +137,13 @@ export type Product = {
   features?: string[];  // caratteristiche verificate (tag Shopify, nome prodotto)
   colors?: string[];    // varianti colore disponibili
   details?: string;     // misure dalla scheda prodotto
+  imgW?: number;        // dimensioni originali della foto (servono per ritagliarla)
+  imgH?: number;
 };
 
 export type TemplateStyle = "classico" | "minimal" | "bold" | "editorial" | "statement";
 export type ColorMode = "light" | "dark";
-export type StatementPosition = "top" | "bottom" | "both";
+export type StatementPosition = "top" | "bottom" | "both" | "split";
 
 // Logo Occhiale Matto BIANCO su PNG trasparente (per header/footer scuri).
 export const OM_LOGO_WHITE = "https://d3k81ch9hvuctc.cloudfront.net/company/SuvjeA/images/efab9e30-782b-4853-8d7b-d6184c7e3458.png";
@@ -196,7 +198,7 @@ export const STRATEGY_SCHEMA: Record<string, unknown> = {
         type: "object",
         properties: {
           text: { type: "string", description: "Subject line dell'email, max 35 caratteri" },
-          statement: { type: "string", description: "Solo template statement: frase gigante (max 4 parole). Stringa vuota negli altri template." },
+          statement: { type: "string", description: "Solo template statement: la frase gigante, oppure le due frasi sopra e sotto la foto separate da \" / \". Stringa vuota negli altri template." },
           preview: { type: "string", description: "Preview text, 40-80 caratteri" },
           score: { type: "integer", description: "Efficacia stimata da 0 a 100" },
           rationale: { type: "string" }
@@ -232,8 +234,9 @@ export function buildStrategyPrompt(opts: {
   focus?: string;
   notes?: string;
   templateStyle?: TemplateStyle;
+  statementPosition?: StatementPosition;
 }): { system: string; user: string } {
-  const { emailType, selectedProducts, recentCampaigns, topPerformers, focus, notes, templateStyle = "classico" } = opts;
+  const { emailType, selectedProducts, recentCampaigns, topPerformers, focus, notes, templateStyle = "classico", statementPosition = "top" } = opts;
   const isStatement = templateStyle === "statement";
   const hero = selectedProducts[0];
 
@@ -254,14 +257,46 @@ REGOLE BRAND (non negoziabili)
     .map((p, i) => `${i + 1}. ${p.name} — ${formatPrice(p.price)}${p.category ? ` — ${p.category}` : ""}${p.isNew ? " — NUOVO" : ""}\n${officialProductData(p)}`)
     .join("\n");
 
+  const heroPrice = hero ? formatPrice(hero.price) : "€29,99";
+  const isPair = statementPosition === "both" || statementPosition === "split";
+  const statementFormat =
+    statementPosition === "both"
+      ? `DUE frasi separate da " / ": prima il GANCIO che sta sopra la foto (max 4 parole), poi la CHIUSURA sotto la foto (max 5 parole) che risponde al gancio. Esempio: "SEMBRA CARO. / Costa ${heroPrice}."`
+      : statementPosition === "split"
+        ? `UNA frase spezzata in due metà separate da " / ": la prima sta sopra la foto, la seconda sotto (max 4 parole ciascuna). Esempio: "NON È UN OCCHIALE. / È UN CARATTERE."`
+        : "la frase gigante stampata nell'email: MAX 4 parole, niente emoji, incisiva (verrà resa maiuscola). Può essere diversa dalla subject.";
+
   const statementBlock = isStatement
     ? `
 ## TEMPLATE STATEMENT (IMPORTANTE)
-L'email è minimalista: UN solo occhiale gigante su fondo bianco e UNA frase secca gigante (lo "statement"). Il protagonista è il prodotto 1 (${hero?.name || "il primo della lista"}).
+L'email è minimalista: UN solo occhiale grande su fondo bianco e frasi secche giganti. Il protagonista è il prodotto 1 (${hero?.name || "il primo della lista"}).
 Dai 4 opzioni. Per ognuna:
 - "text" = la SUBJECT della mail (max 35 caratteri, stesse regole delle subject)
-- "statement" = la frase gigante stampata nell'email: MAX 4 parole, niente emoji, incisiva (verrà resa maiuscola). Può essere diversa dalla subject.
-Varia il tipo di statement tra le opzioni: il puro nome del modello (es. "${hero?.name || "MODELLO"}"), annuncio (es. "NUOVO", "APPENA ARRIVATO", "TORNATO"), prezzo-ancora (es. "DA ${hero ? formatPrice(hero.price) : "€29,99"}") solo se ha senso, provocazione urbana OM. Urgenza/scarsità SOLO se indicata nelle note.
+- "statement" = ${statementFormat}
+${isPair ? `
+Regole per le frasi sopra e sotto la foto:
+- Sopra = il gancio: si legge prima di vedere l'occhiale, crea attesa o fa un'affermazione forte.
+- Sotto = la chiusura: risponde al gancio, lo completa o lo ribalta. Mai la stessa parola sopra e sotto.
+- Le frasi chiudono col punto. Il prezzo al massimo una volta, ed è quello esatto del prodotto.
+Esempi approvati dal brand (usali come modello e adattali al prodotto, puoi anche riprenderli uguali):
+- NUOVO. / E ti sta già bene.
+- APPENA ATTERRATO. / ${hero?.name || "Jonny"} è online.
+- È TORNATO. / Stavolta non aspettare.
+- LO CERCAVI. / Eccolo di nuovo.
+- NON SBAGLIA MAI. / ${hero?.name || "Jonny"}. Punto.
+- SEMBRA CARO. / Costa ${heroPrice}.
+- IL SOLE NON ASPETTA. / Tu nemmeno.
+- ESTATE IN VISTA. / Mettila a fuoco.
+- NON È UN OCCHIALE. / È un carattere.
+- NORMALE, MAI. / Matto, sempre.
+- TI GUARDERANNO. / Lasciali fare.
+- REGALALO. / O tienilo. Non giudichiamo.
+- È SEMPRE LUI. / Il più scelto. Non per caso. (solo se è davvero tra i più venduti)
+- LO HANNO TUTTI. / Tu ancora no. (solo se è davvero tra i più venduti)
+- SI ADATTANO ALLA LUCE. / Tu no. (solo se il prodotto ha lenti fotocromatiche)
+- PRENDI 2. / Paghi 1. Fine. (solo se la promo è nelle note)
+` : ""}
+Varia il tipo di frase tra le opzioni: il puro nome del modello (es. "${hero?.name || "MODELLO"}"), annuncio (es. "NUOVO", "APPENA ARRIVATO", "TORNATO"), prezzo-ancora (es. "DA ${heroPrice}") solo se ha senso, provocazione urbana OM. Urgenza/scarsità SOLO se indicata nelle note.
 `
     : "";
 
@@ -282,7 +317,7 @@ ${focus ? `\n## FOCUS STRATEGICO\n${focus}\n` : ""}${notes ? `\n## NOTE AGGIUNTI
 ## OUTPUT
 Proponi ${isStatement ? 4 : 3} opzioni diverse tra loro, nel formato JSON richiesto:
 - text: subject line (max 35 caratteri)
-- statement: ${isStatement ? "la frase gigante (max 4 parole)" : 'stringa vuota ""'}
+- statement: ${isStatement ? (isPair ? 'le due frasi separate da " / "' : "la frase gigante (max 4 parole)") : 'stringa vuota ""'}
 - preview: preview text (40-80 caratteri)
 - score: efficacia stimata 0-100, coerente con i dati storici
 - rationale: perché funziona, in 1-2 frasi, citando i dati storici quando utile
@@ -328,19 +363,26 @@ function getPaletteForMode(mode: ColorMode): string {
 function getTemplateInstructions(
   style: TemplateStyle,
   mode: ColorMode,
-  statementPosition: StatementPosition = "top"
+  statementPosition: StatementPosition = "top",
+  heroCropped = false
 ): string {
   const buildStatementPositionBlock = (): string => {
     switch (statementPosition) {
       case "bottom":
-        return "L'utente ha scelto TESTO SOTTO. Ordine: [logo] → [foto occhiale gigante] → [eyebrow nome modello] → [STATEMENT gigante] → [bottone CTA] → [footer]. NIENTE testo sopra la foto.";
+        return "TESTO SOTTO. Ordine: [logo] → [foto] → [eyebrow facoltativo, es. il nome del modello] → [FRASE PRINCIPALE] → [riga prezzo: solo il prezzo se il nome è già nell'eyebrow] → [bottone CTA] → [footer]. NIENTE testo sopra la foto.";
       case "both":
-        return "L'utente ha scelto TESTO SOPRA E SOTTO. Ordine: [logo] → [eyebrow + STATEMENT gigante] → [foto occhiale gigante] → [una riga di rinforzo sotto: es. nome modello o prezzo o micro-frase, NON ripetere identico lo statement] → [bottone CTA] → [footer]. Lo statement grande sta SOPRA; sotto la foto solo una riga breve di supporto.";
+        return "SOPRA + SOTTO (gancio e chiusura). Ordine: [logo] → [FRASE SOPRA, grande] → [foto] → [FRASE SOTTO: Bebas Neue UPPERCASE nero, circa metà della dimensione della frase sopra, es. 30-36px desktop / 22-26px mobile] → [riga NOME · PREZZO, oppure solo il NOME se la frase sotto contiene già il prezzo] → [bottone CTA] → [footer]. La frase sotto risponde a quella sopra (la completa o la ribalta): non ripeterla e non usare la stessa parola. Esempi: \"SEMBRA CARO.\" / \"COSTA €29,99.\" · \"IL SOLE NON ASPETTA.\" / \"TU NEMMENO.\" · \"TI GUARDERANNO.\" / \"LASCIALI FARE.\"";
+      case "split":
+        return "FRASE SPEZZATA. Ordine: [logo] → [PRIMA METÀ della frase, grande] → [foto] → [SECONDA METÀ, stessa dimensione e stesso stile della prima] → [riga NOME · PREZZO] → [bottone CTA] → [footer]. Le due metà sono un'unica frase che abbraccia l'occhiale (es. \"NON È UN OCCHIALE.\" sopra, \"È UN CARATTERE.\" sotto).";
       case "top":
       default:
-        return "L'utente ha scelto TESTO SOPRA (come le drop classiche). Ordine: [logo] → [eyebrow nome modello] → [STATEMENT gigante] → [foto occhiale gigante] → [bottone CTA] → [footer]. NIENTE testo sotto la foto (a parte il bottone).";
+        return "TESTO SOPRA (come le drop classiche). Ordine: [logo] → [eyebrow facoltativo, es. NUOVO ARRIVO] → [FRASE PRINCIPALE] → [foto] → [riga NOME · PREZZO] → [bottone CTA] → [footer]. Sotto la foto solo la riga nome·prezzo e il bottone.";
     }
   };
+
+  const heroPhotoSpec = heroCropped
+    ? "la foto arriva GIÀ RITAGLIATA in orizzontale: l'occhiale riempie la larghezza e il bianco sopra e sotto è già stato tolto. Usa <img src=\"{{IMG_0}}\" width=\"520\" alt=\"...\" style=\"display:block;width:100%;max-width:520px;height:auto;border:0;margin:0 auto\">, centrata e cliccabile (avvolta in <a href=\"{{URL_0}}\">)."
+    : "usa <img src=\"{{IMG_0}}\" width=\"440\" alt=\"...\" style=\"display:block;width:100%;max-width:440px;height:auto;border:0;margin:0 auto\">, centrata e cliccabile (avvolta in <a href=\"{{URL_0}}\">).";
 
   switch (style) {
     case "minimal":
@@ -378,37 +420,31 @@ Vibe: magazine, fashion, raffinato. Tipografia mista serif/sans, layout più asi
 
     case "statement":
       return `### TEMPLATE — STATEMENT (selezionato)
-Vibe: minimalismo assoluto, prodotto-eroe. UN solo occhiale gigante, una frase secca, sfondo BIANCO. Ispirato alle email drop di alto livello: zero rumore, tutto sul prodotto e sul messaggio. Questo template IGNORA la modalità colore: è SEMPRE su sfondo bianco.
+Vibe: minimalismo assoluto, prodotto-eroe. UN solo occhiale grande, frasi secche, sfondo BIANCO. Zero rumore: tutto sul prodotto e sul messaggio. Questo template IGNORA la modalità colore: è SEMPRE su sfondo bianco.
 
 REGOLE STRUTTURALI FISSE (questo template sovrascrive palette e sezioni alternate):
-- SFONDO: tutta l'email su bianco #ffffff, HEADER E FOOTER INCLUSI. NESSUNA sezione scura, NESSUN blocco nero da nessuna parte (tranne il bottone CTA). Bianco pieno dall'alto in basso.
-- HEADER: logo Occhiale Matto NERO su bianco (NON quello bianco!). Usa come src il placeholder {{LOGO}} (verrà sostituito con il logo nero corretto). Larghezza 150px, centrato, sfondo bianco. SPAZI COMPATTI: padding-top 28px, padding-bottom SOLO 12-16px (il logo deve stare VICINO alla parte testuale sotto, non lontano). NON mettere striscia nera dietro: il logo è nero, si legge su bianco.
+- SFONDO: tutta l'email su bianco #ffffff, HEADER E FOOTER INCLUSI. NESSUNA sezione scura, NESSUN blocco nero da nessuna parte (tranne il bottone CTA).
+- HEADER: SOLO il logo immagine Occhiale Matto NERO su bianco, con src il placeholder {{LOGO}} (verrà sostituito con il logo nero). MAI scrivere "OCCHIALE MATTO" come testo, né al posto del logo né accanto. Larghezza 150px, centrato, padding-top 28px, padding-bottom 16px. Nessuna striscia nera dietro.
 - UN SOLO PRODOTTO (mono-prodotto): usa esclusivamente il primo prodotto della lista. Se ne arrivano più di uno, ignora gli altri.
-- FOTO OCCHIALE: gigante, centrata, la protagonista. width 100% max-width 440px, height auto, object-fit:contain, background transparent. Cliccabile (avvolta in <a href="{{URL_0}}">). Padding verticale attorno moderato (32-40px), non esagerato.
-- STATEMENT (la frase gigante): Bebas Neue UPPERCASE, colore nero #1a1a1a, centrato, line-height 0.95. È il cuore dell'email. Testo = HEADLINE HERO fornito in input.
-  DIMENSIONE ADATTIVA (CRITICO — la frase NON deve MAI sbordare oltre i lati):
-  * Frase CORTA (fino a ~12 caratteri, es. "NUOVO", "JONNY"): 72-88px desktop / 48-56px mobile.
-  * Frase MEDIA (13-24 caratteri): 52-64px desktop / 38-46px mobile.
-  * Frase LUNGA (25+ caratteri, es. "JONNY. €29,99. FINITO."): 38-48px desktop / 30-38px mobile.
-  * In OGNI caso il testo deve stare DENTRO il contenitore (max-width 600px con padding laterale 24px): usa word-wrap:break-word e lascia che vada a capo su più righe invece di sforare. MAI una riga che esce dai bordi.
-  ANDARE A CAPO (simmetria): se la frase ha più parole o segmenti separati da punto (es. "JONNY. €29,99. FINITO."), spezzala su PIÙ RIGHE in modo BILANCIATO e centrato, tipicamente una frase/segmento per riga:
-    JONNY.
-    €29,99.
-    FINITO.
-  Ogni riga centrata orizzontalmente, spaziatura verticale uniforme. Il blocco deve risultare SIMMETRICO e ordinato, mai una riga lunghissima che esce dallo schermo. Usa <br> tra i segmenti oppure inserisci a capo ai punti/pause naturali.
-- EYEBROW (sopra o sotto lo statement): il nome del modello o micro-testo, 11px letter-spacing 4px UPPERCASE, colore grigio #6a6a6a, centrato. Vicino allo statement (margin 8-12px), non distante. Se lo statement è già il nome del modello, non ripeterlo identico nell'eyebrow: usa un micro-testo diverso.
+- FOTO OCCHIALE: ${heroPhotoSpec} NON impostare height né object-fit e non aggiungere padding attorno alla foto. Questa foto NON segue la ricetta CARD PRODOTTO 280x280.
+- FRASE PRINCIPALE (lo statement): Bebas Neue UPPERCASE, nero #1a1a1a, centrata, line-height 0.95. È il cuore dell'email: il testo è quello fornito in input.
+  DIMENSIONE (la frase NON deve MAI sbordare oltre i lati):
+  * fino a ~12 caratteri (es. "NUOVO", "SEMBRA CARO."): 60-72px desktop / 40-48px mobile
+  * 13-24 caratteri: 44-54px desktop / 32-38px mobile
+  * 25+ caratteri: 32-40px desktop / 26-32px mobile
+  Contenitore max-width 600px con padding laterale 24px e word-wrap:break-word: meglio andare a capo che sforare. Se la frase ha più segmenti separati da punto (es. "JONNY. €29,99. FINITO."), un segmento per riga, righe centrate e bilanciate.
+- EYEBROW (micro-testo, es. "NUOVO ARRIVO"): Montserrat 10px, letter-spacing 3px, UPPERCASE, grigio #6a6a6a, centrato, 6px sopra la frase. Facoltativo: usalo solo se aggiunge un'informazione e non ripete la frase.
+- RIGA NOME · PREZZO: una sola riga "NOME · PREZZO" (es. "JONNY · €29,99"), Montserrat 12px, letter-spacing 3px, UPPERCASE, #1a1a1a, centrata. Niente prezzi giganti, niente cartellini. Il prezzo compare UNA SOLA VOLTA in tutta l'email: se una frase lo contiene già, qui scrivi solo il nome.
+- SPAZI (CRITICO, le frasi devono stare VICINE all'occhiale): 12px tra la frase e la foto, 12px tra la foto e il testo sotto, 20px tra la riga nome·prezzo e il bottone. Mai spazi vuoti grandi tra testo e foto.
+- CTA: UN SOLO bottone a pillola (border-radius:999px), sfondo nero #1a1a1a, testo bianco #ffffff, padding 14px 40px, Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato, verso l'URL prodotto. Testo breve e assertivo (LO VOGLIO, PRENDILO, È MIO, SCOPRILO). Doppia protezione colore (span interno con !important).
+- NIENTE strip feature emoji, NIENTE quote block, NIENTE altre sezioni prodotto. Il minimalismo è la regola.
+- FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO come src del placeholder {{LOGO}} (stesso logo nero dell'header) a 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), link di disiscrizione in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
 
 POSIZIONE DEL TESTO — CONFIGURAZIONE: ${buildStatementPositionBlock()}
 
-- BLOCCO NOME+PREZZO (nuovo layout minimal, sotto la foto): NON impilare "NOME" e poi "€29,99" su due righe grandi centrate (vecchio layout, da NON usare). Nuovo layout: il nome modello piccolo come eyebrow (11px letter-spacing 4px UPPERCASE grigio #6a6a6a), e IL PREZZO come unico elemento in evidenza SOTTO, ma discreto ed elegante: Montserrat 15-16px, colore #1a1a1a, con una sottile linea/separatore o semplicemente centrato con respiro. L'effetto deve essere pulito e da boutique, non un cartellino. Esempio di gerarchia: [eyebrow: JONNY] piccolo, poi [€29,99] leggermente più grande ma sobrio. Niente grassetti pesanti, niente prezzi giganti.
-- PREZZO: mostralo SEMPRE (esatto dal catalog) nel blocco sotto la foto, TRANNE se lo statement gigante contiene già il prezzo o la parola "€" (es. statement "JONNY. €29,99. FINITO." oppure "DA €29,99"). In quel caso il prezzo è GIÀ nello statement: NON ripeterlo sotto, mostra solo il nome modello. Regola anti-doppione: il prezzo deve comparire UNA SOLA VOLTA in tutta l'email.
-- CTA: UN SOLO bottone a pillola (border-radius:999px), stile "SCOPRILO ORA". Sfondo nero #1a1a1a, testo bianco #ffffff, padding 16px 44px, font Montserrat 13px bold letter-spacing 2px UPPERCASE, centrato. Doppia protezione colore (span interno con !important). Cliccabile verso URL prodotto.
-- NIENTE strip feature emoji, NIENTE quote block, NIENTE sezioni multiple prodotto. Il minimalismo è la regola.
-- FOOTER — INVERTITO (bianco): sfondo BIANCO #ffffff, testo NERO. Usa il logo NERO come src del placeholder {{LOGO}} (stesso logo nero dell'header) a 120px, NON quello bianco. Payoff "CRAZY FASHION EYEWEAR SINCE 2019" in nero/grigio scuro #1a1a1a, 3 negozi Roma cliccabili in #1a1a1a, link social testuali in #1a1a1a ("SEGUICI SU INSTAGRAM →" / "SEGUICI SU TIKTOK →"), link di disiscrizione in grigio #6a6a6a. Una sottile linea divisoria #e8ddd0 in cima al footer per separarlo dal corpo. TUTTO su bianco, coerente col resto.
-
 IMPORTANTE: questo template è l'ECCEZIONE alla regola "logo sempre su sfondo scuro". Qui il logo (header E footer) è quello NERO su bianco. NON applicare la striscia nera dietro il logo in nessun punto.
 
-Risultato: email pulitissima, tutta bianca (header, corpo, footer), logo nero, frase secca, occhiale gigante, prezzo elegante e discreto, un bottone. Massimo impatto, minimo rumore.`;
+Risultato: email pulitissima, tutta bianca, logo nero, frasi secche vicine all'occhiale, riga nome·prezzo discreta, un bottone. Massimo impatto, minimo rumore.`;
 
     case "classico":
     default:
@@ -497,6 +533,26 @@ Nessun testo prima o dopo. Nessun backtick markdown. Nessuna spiegazione.`;
 /**
  * Prompt per l'HTML (step 3): system fisso in cache + richiesta con i dati variabili.
  */
+const cleanHeadline = (s: string) => s.toUpperCase().replace(/"/g, "").trim();
+
+/**
+ * Frasi del template Statement. Con "Sopra + sotto" e "Frase spezzata" le due frasi
+ * arrivano separate da "/" (es. "SEMBRA CARO. / COSTA €29,99.").
+ */
+function statementCopy(raw: string, position: StatementPosition): string {
+  const [first, ...rest] = raw.split("/");
+  const second = rest.join(" ").trim();
+  if (position === "both" || position === "split") {
+    if (second) {
+      return `FRASE SOPRA LA FOTO: "${cleanHeadline(first)}"\nFRASE SOTTO LA FOTO: "${cleanHeadline(second)}"`;
+    }
+    return position === "split"
+      ? `FRASE DA SPEZZARE (metà sopra e metà sotto la foto, taglia alla pausa naturale): "${cleanHeadline(first)}"`
+      : `FRASE SOPRA LA FOTO: "${cleanHeadline(first)}"\nFRASE SOTTO LA FOTO: scrivila tu, max 5 parole, che risponda alla frase sopra`;
+  }
+  return `HEADLINE HERO: "${cleanHeadline(raw.replace(/\s*\/\s*/g, " "))}"`;
+}
+
 export function buildHtmlPrompt(opts: {
   chosenSubject: string;
   chosenPreview: string;
@@ -507,6 +563,7 @@ export function buildHtmlPrompt(opts: {
   templateStyle?: TemplateStyle;
   colorMode?: ColorMode;
   statementPosition?: StatementPosition;
+  heroCropped?: boolean;
 }): { system: string; user: string } {
   const {
     chosenSubject,
@@ -516,12 +573,16 @@ export function buildHtmlPrompt(opts: {
     selectedProducts,
     strategy,
     templateStyle = "classico",
-    statementPosition = "top"
+    statementPosition = "top",
+    heroCropped = false
   } = opts;
 
   // Il template statement è SEMPRE su fondo bianco: ignora il colorMode scelto.
   const colorMode: ColorMode = templateStyle === "statement" ? "light" : (opts.colorMode || "light");
   const headline = (templateStyle === "statement" && chosenStatement?.trim()) ? chosenStatement : chosenSubject;
+  const headlineBlock = templateStyle === "statement"
+    ? statementCopy(headline, statementPosition)
+    : `HEADLINE HERO: "${cleanHeadline(headline)}"`;
 
   const productBlocks = selectedProducts.map((p, i) => `
 PRODOTTO ${i + 1}: ${p.name}
@@ -539,7 +600,7 @@ INPUT EMAIL
 SUBJECT: "${chosenSubject}"
 PREVIEW TEXT: "${chosenPreview}"
 TIPO: ${emailType}
-HEADLINE HERO: "${headline.toUpperCase().replace(/"/g, "")}"
+${headlineBlock}
 STRUTTURA CONSIGLIATA: ${strategy || "Hero + griglia prodotti + CTA"}
 TEMPLATE SELEZIONATO: ${templateStyle.toUpperCase()}
 MODALITÀ COLORE: ${colorMode.toUpperCase()}
@@ -553,7 +614,7 @@ CONFIGURAZIONE GRAFICA SELEZIONATA DALL'UTENTE
 
 ${getPaletteForMode(colorMode)}
 
-${getTemplateInstructions(templateStyle, colorMode, statementPosition)}`;
+${getTemplateInstructions(templateStyle, colorMode, statementPosition, heroCropped)}`;
 
   return { system: buildHtmlSystemPrompt(), user };
 }
