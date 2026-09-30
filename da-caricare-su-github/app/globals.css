@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #faf7f2;
+  --fg: #1a1a1a;
+  --yellow: #F5D547;
+  --red: #E63946;
+}
+
+/* Griglie della piattaforma: su schermi stretti vanno in colonna */
+.om-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.om-adv-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
+@media (max-width: 760px) {
+  .om-grid-2, .om-adv-layout { grid-template-columns: 1fr; }
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Montserrat', system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
